@@ -1,0 +1,9 @@
+image,json
+data/dataset/mo003.jpg,data/dataset/mo003.json
+data/dataset/mo010.jpg,data/dataset/mo009.json
+data/dataset/mo001.jpg,data/dataset/mo001.json
+data/dataset/mo002.jpg,data/dataset/mo007.json
+data/dataset/mo008.jpg,data/dataset/mo005.json
+data/dataset/mo007.jpg,data/dataset/mould02.json
+data/dataset/mould02.jpg,data/dataset/mo004.json
+data/dataset/mo005.jpg,data/dataset/mo008.json
