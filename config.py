@@ -41,7 +41,7 @@ class Config(object):
     # train
     LR = 1.25e-4  # learning rate for batch size 32.
     LR_STEP = [90, 120]  # drop learning rate by 10.'
-    NUM_EPOCHS = 140  # total training epochs.
+    NUM_EPOCHS = 30  # total training epochs.
     BATCH_SIZE = 4
     VAL_INTERVALS = 5  # number of epochs to run validation.
 

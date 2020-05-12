@@ -28,68 +28,66 @@ class ModelWithLoss(torch.nn.Module):
         return outputs[-1], loss, loss_stats
 
 
-class CtdetLoss(torch.nn.Module):
-    def __init__(self, opt):
-        super(CtdetLoss, self).__init__()
-        self.crit = torch.nn.MSELoss() if opt.mse_loss else FocalLoss()
-        self.crit_reg = RegL1Loss() if opt.reg_loss == 'l1' else \
-            RegLoss() if opt.reg_loss == 'sl1' else None
-        self.crit_wh = torch.nn.L1Loss(reduction='sum') if opt.dense_wh else \
-            NormRegL1Loss() if opt.norm_wh else \
-                RegWeightedL1Loss() if opt.cat_spec_wh else self.crit_reg
-        self.opt = opt
+class CircleLoss(torch.nn.Module):
+    def __init__(self, cfg):
+        super(CircleLoss, self).__init__()
+        self.hm_loss = torch.nn.MSELoss() if cfg.MSE_LOSS else FocalLoss()
+        self.reg_loss = RegL1Loss() if cfg.REG_LOSS == 'l1' else RegLoss()
+        self.wh_loss = torch.nn.L1Loss(reduction='sum') if cfg.DENSE_WH else \
+            NormRegL1Loss() if cfg.NORM_WH else RegWeightedL1Loss() if cfg.CAT_SPEC_WH else self.crit_reg
+        self.cfg = cfg
 
     def forward(self, outputs, batch):
-        opt = self.opt
-        hm_loss, wh_loss, off_loss = 0, 0, 0
-        for s in range(opt.num_stacks):
+        cfg = self.cfg
+        res_hm_loss, res_wh_loss, res_off_loss = 0, 0, 0
+        for s in range(cfg.NUM_STACKS):
             output = outputs[s]
-            if not opt.mse_loss:
+            if not cfg.MSE_LOSS:
                 output['hm'] = _sigmoid(output['hm'])
 
-            if opt.eval_oracle_hm:
+            if cfg.EVAL_ORACLE_HM:
                 output['hm'] = batch['hm']
-            if opt.eval_oracle_wh:
+            if cfg.EVAL_ORACLE_WH:
                 output['wh'] = torch.from_numpy(gen_oracle_map(
                     batch['wh'].detach().cpu().numpy(),
                     batch['ind'].detach().cpu().numpy(),
-                    output['wh'].shape[3], output['wh'].shape[2])).to(opt.device)
-            if opt.eval_oracle_offset:
+                    output['wh'].shape[3], output['wh'].shape[2])).to(cfg.DEVICE)
+            if cfg.EVAL_ORACLE_OFFSET:
                 output['reg'] = torch.from_numpy(gen_oracle_map(
                     batch['reg'].detach().cpu().numpy(),
                     batch['ind'].detach().cpu().numpy(),
-                    output['reg'].shape[3], output['reg'].shape[2])).to(opt.device)
+                    output['reg'].shape[3], output['reg'].shape[2])).to(cfg.DEVICE)
 
-            hm_loss += self.crit(output['hm'], batch['hm']) / opt.num_stacks
-            if opt.wh_weight > 0:
-                if opt.dense_wh:
+            res_hm_loss += self.hm_loss(output['hm'], batch['hm']) / cfg.NUM_STACKS
+            if cfg.WH_WEIGHT > 0:
+                if cfg.DENSE_WH:
                     mask_weight = batch['dense_wh_mask'].sum() + 1e-4
-                    wh_loss += (
-                                       self.crit_wh(output['wh'] * batch['dense_wh_mask'],
+                    res_wh_loss += (
+                                       self.wh_loss(output['wh'] * batch['dense_wh_mask'],
                                                     batch['dense_wh'] * batch['dense_wh_mask']) /
-                                       mask_weight) / opt.num_stacks
-                elif opt.cat_spec_wh:
-                    wh_loss += self.crit_wh(
+                                       mask_weight) / cfg.NUM_STACKS
+                elif cfg.CAT_SPEC_WHv:
+                    res_wh_loss += self.wh_loss(
                         output['wh'], batch['cat_spec_mask'],
-                        batch['ind'], batch['cat_spec_wh']) / opt.num_stacks
+                        batch['ind'], batch['cat_spec_wh']) / cfg.NUM_STACKS
                 else:
-                    wh_loss += self.crit_reg(
+                    res_wh_loss += self.reg_loss(
                         output['wh'], batch['reg_mask'],
-                        batch['ind'], batch['wh']) / opt.num_stacks
+                        batch['ind'], batch['wh']) / cfg.NUM_STACKS
 
-            if opt.reg_offset and opt.off_weight > 0:
-                off_loss += self.crit_reg(output['reg'], batch['reg_mask'],
-                                          batch['ind'], batch['reg']) / opt.num_stacks
+            res_off_loss += self.reg_loss(output['reg'], batch['reg_mask'],
+                                          batch['ind'], batch['reg']) / cfg.NUM_STACKS
 
-        loss = opt.hm_weight * hm_loss + opt.wh_weight * wh_loss + \
-               opt.off_weight * off_loss
-        loss_stats = {'loss': loss, 'hm_loss': hm_loss,
-                      'wh_loss': wh_loss, 'off_loss': off_loss}
+        loss = cfg.HM_WEIGHT * res_hm_loss + cfg.WH_WEIGHT * res_wh_loss + cfg.OFF_WEIGHT * res_off_loss
+        loss_stats = {'loss': loss, 'hm_loss': res_hm_loss,
+                      'wh_loss': res_wh_loss, 'off_loss': res_off_loss}
         return loss, loss_stats
 
 
 def _slow_neg_loss(pred, gt):
-    '''focal loss from CornerNet'''
+    """
+    focal loss from CornerNet
+    """
     pos_inds = gt.eq(1)
     neg_inds = gt.lt(1)
 
@@ -114,12 +112,12 @@ def _slow_neg_loss(pred, gt):
 
 
 def _neg_loss(pred, gt):
-    ''' Modified focal loss. Exactly the same as CornerNet.
+    """ Modified focal loss. Exactly the same as CornerNet.
       Runs faster and costs a little bit more memory
     Arguments:
       pred (batch x c x h x w)
       gt_regr (batch x c x h x w)
-  '''
+  """
     pos_inds = gt.eq(1).float()
     neg_inds = gt.lt(1).float()
 

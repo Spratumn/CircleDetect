@@ -181,7 +181,7 @@ class CircleDataset(Dataset):
                 gt_det.append([ct[0] - w / 2, ct[1] - h / 2,
                                ct[0] + w / 2, ct[1] + h / 2, 1, cls_id])
 
-        ret = {'input': inp, 'hm': hm, 'reg_mask': reg_mask, 'ind': ind}
+        ret = {'input': inp, 'hm': hm, 'reg_mask': reg_mask, 'ind': ind, 'wh': wh}
         hm_a = hm.max(axis=0, keepdims=True)
         dense_wh_mask = np.concatenate([hm_a, hm_a], axis=0)
         ret.update({'dense_wh': dense_wh, 'dense_wh_mask': dense_wh_mask})
