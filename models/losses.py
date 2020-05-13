@@ -1,201 +1,66 @@
-# ------------------------------------------------------------------------------
-# Portions of this code are from
-# CornerNet (https://github.com/princeton-vl/CornerNet)
-# Copyright (c) 2018, University of Michigan
-# Licensed under the BSD 3-Clause License
-# ------------------------------------------------------------------------------
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import torch
 import torch.nn as nn
-from .utils import _transpose_and_gather_feat
 import torch.nn.functional as F
-from utils.oracle_utils import gen_oracle_map
-from models.utils import _sigmoid
 
 
-class ModelWithLoss(torch.nn.Module):
-    def __init__(self, model, loss):
-        super(ModelWithLoss, self).__init__()
-        self.model = model
-        self.loss = loss
-
-    def forward(self, batch):
-        outputs = self.model(batch['input'])
-        loss, loss_stats = self.loss(outputs, batch)
-        return outputs[-1], loss, loss_stats
-
-
-class CircleLoss(torch.nn.Module):
+class CircleLoss(nn.Module):
     def __init__(self, cfg):
         super(CircleLoss, self).__init__()
-        self.hm_loss = torch.nn.MSELoss() if cfg.MSE_LOSS else FocalLoss()
+        self.hm_loss = FocalLoss()
+        self.wh_loss = nn.L1Loss()
         self.reg_loss = RegL1Loss() if cfg.REG_LOSS == 'l1' else RegLoss()
-        self.wh_loss = torch.nn.L1Loss(reduction='sum') if cfg.DENSE_WH else \
-            NormRegL1Loss() if cfg.NORM_WH else RegWeightedL1Loss() if cfg.CAT_SPEC_WH else self.crit_reg
         self.cfg = cfg
 
-    def forward(self, outputs, batch):
+    def forward(self, output, label):
         cfg = self.cfg
-        res_hm_loss, res_wh_loss, res_off_loss = 0, 0, 0
-        for s in range(cfg.NUM_STACKS):
-            output = outputs[s]
-            if not cfg.MSE_LOSS:
-                output['hm'] = _sigmoid(output['hm'])
-
-            if cfg.EVAL_ORACLE_HM:
-                output['hm'] = batch['hm']
-            if cfg.EVAL_ORACLE_WH:
-                output['wh'] = torch.from_numpy(gen_oracle_map(
-                    batch['wh'].detach().cpu().numpy(),
-                    batch['ind'].detach().cpu().numpy(),
-                    output['wh'].shape[3], output['wh'].shape[2])).to(cfg.DEVICE)
-            if cfg.EVAL_ORACLE_OFFSET:
-                output['reg'] = torch.from_numpy(gen_oracle_map(
-                    batch['reg'].detach().cpu().numpy(),
-                    batch['ind'].detach().cpu().numpy(),
-                    output['reg'].shape[3], output['reg'].shape[2])).to(cfg.DEVICE)
-
-            res_hm_loss += self.hm_loss(output['hm'], batch['hm']) / cfg.NUM_STACKS
-            if cfg.WH_WEIGHT > 0:
-                if cfg.DENSE_WH:
-                    mask_weight = batch['dense_wh_mask'].sum() + 1e-4
-                    res_wh_loss += (
-                                       self.wh_loss(output['wh'] * batch['dense_wh_mask'],
-                                                    batch['dense_wh'] * batch['dense_wh_mask']) /
-                                       mask_weight) / cfg.NUM_STACKS
-                elif cfg.CAT_SPEC_WHv:
-                    res_wh_loss += self.wh_loss(
-                        output['wh'], batch['cat_spec_mask'],
-                        batch['ind'], batch['cat_spec_wh']) / cfg.NUM_STACKS
-                else:
-                    res_wh_loss += self.reg_loss(
-                        output['wh'], batch['reg_mask'],
-                        batch['ind'], batch['wh']) / cfg.NUM_STACKS
-
-            res_off_loss += self.reg_loss(output['reg'], batch['reg_mask'],
-                                          batch['ind'], batch['reg']) / cfg.NUM_STACKS
-
+        res_hm_loss = self.hm_loss(output['hm'], label['hm'])
+        print(res_hm_loss)
+        res_wh_loss = self.wh_loss(output['wh'] * label['dense_wh_mask'], label['dense_wh'] * label['dense_wh_mask'])
+        print(res_wh_loss)
+        res_off_loss = self.reg_loss(output['reg'], label['reg_mask'], label['ind'], label['reg'])
+        print(res_off_loss)
         loss = cfg.HM_WEIGHT * res_hm_loss + cfg.WH_WEIGHT * res_wh_loss + cfg.OFF_WEIGHT * res_off_loss
         loss_stats = {'loss': loss, 'hm_loss': res_hm_loss,
                       'wh_loss': res_wh_loss, 'off_loss': res_off_loss}
         return loss, loss_stats
 
 
-def _slow_neg_loss(pred, gt):
-    """
-    focal loss from CornerNet
-    """
-    pos_inds = gt.eq(1)
-    neg_inds = gt.lt(1)
-
-    neg_weights = torch.pow(1 - gt[neg_inds], 4)
-
-    loss = 0
-    pos_pred = pred[pos_inds]
-    neg_pred = pred[neg_inds]
-
-    pos_loss = torch.log(pos_pred) * torch.pow(1 - pos_pred, 2)
-    neg_loss = torch.log(1 - neg_pred) * torch.pow(neg_pred, 2) * neg_weights
-
-    num_pos = pos_inds.float().sum()
-    pos_loss = pos_loss.sum()
-    neg_loss = neg_loss.sum()
-
-    if pos_pred.nelement() == 0:
-        loss = loss - neg_loss
-    else:
-        loss = loss - (pos_loss + neg_loss) / num_pos
-    return loss
-
-
-def _neg_loss(pred, gt):
-    """ Modified focal loss. Exactly the same as CornerNet.
-      Runs faster and costs a little bit more memory
-    Arguments:
-      pred (batch x c x h x w)
-      gt_regr (batch x c x h x w)
-  """
-    pos_inds = gt.eq(1).float()
-    neg_inds = gt.lt(1).float()
-
-    neg_weights = torch.pow(1 - gt, 4)
-
-    loss = 0
-
-    pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds
-    neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
-
-    num_pos = pos_inds.float().sum()
-    pos_loss = pos_loss.sum()
-    neg_loss = neg_loss.sum()
-
-    if num_pos == 0:
-        loss = loss - neg_loss
-    else:
-        loss = loss - (pos_loss + neg_loss) / num_pos
-    return loss
-
-
-def _not_faster_neg_loss(pred, gt):
-    pos_inds = gt.eq(1).float()
-    neg_inds = gt.lt(1).float()
-    num_pos = pos_inds.float().sum()
-    neg_weights = torch.pow(1 - gt, 4)
-
-    loss = 0
-    trans_pred = pred * neg_inds + (1 - pred) * pos_inds
-    weight = neg_weights * neg_inds + pos_inds
-    all_loss = torch.log(1 - trans_pred) * torch.pow(trans_pred, 2) * weight
-    all_loss = all_loss.sum()
-
-    if num_pos > 0:
-        all_loss /= num_pos
-    loss -= all_loss
-    return loss
-
-
-def _slow_reg_loss(regr, gt_regr, mask):
-    num = mask.float().sum()
-    mask = mask.unsqueeze(2).expand_as(gt_regr)
-
-    regr = regr[mask]
-    gt_regr = gt_regr[mask]
-
-    regr_loss = nn.functional.smooth_l1_loss(regr, gt_regr, size_average=False)
-    regr_loss = regr_loss / (num + 1e-4)
-    return regr_loss
-
-
-def _reg_loss(regr, gt_regr, mask):
-    ''' L1 regression loss
-    Arguments:
-      regr (batch x max_objects x dim)
-      gt_regr (batch x max_objects x dim)
-      mask (batch x max_objects)
-  '''
-    num = mask.float().sum()
-    mask = mask.unsqueeze(2).expand_as(gt_regr).float()
-
-    regr = regr * mask
-    gt_regr = gt_regr * mask
-
-    regr_loss = nn.functional.smooth_l1_loss(regr, gt_regr, size_average=False)
-    regr_loss = regr_loss / (num + 1e-4)
-    return regr_loss
-
-
 class FocalLoss(nn.Module):
-    '''nn.Module warpper for focal loss'''
-
-    def __init__(self):
+    def __init__(self, gamma=2, beta=4, size_average=True):
         super(FocalLoss, self).__init__()
-        self.neg_loss = _neg_loss
+        self.gamma = gamma
+        self.beta = beta
+        self.size_average = size_average
 
-    def forward(self, out, target):
-        return self.neg_loss(out, target)
+    def forward(self, inputs, target):
+        """
+        inputs: shape of (N,1,H,W)
+        target: shape of (N,1,H,W)
+        """
+        inputs = F.sigmoid(inputs)
+        inputs = torch.clamp(inputs, min=1e-4, max=1-1e-4)
+
+        pos_inds = target.eq(1)
+        neg_inds = target.lt(1)
+
+        neg_weights = torch.pow(1 - target[neg_inds], self.beta)
+
+        loss = 0
+        pos_pred = inputs[pos_inds]
+        neg_pred = inputs[neg_inds]
+
+        pos_loss = torch.log(pos_pred) * torch.pow(1 - pos_pred, self.gamma)
+        neg_loss = torch.log(1 - neg_pred) * torch.pow(neg_pred, self.gamma) * neg_weights
+
+        num_pos = pos_inds.float().sum()
+        pos_loss = pos_loss.sum()
+        neg_loss = neg_loss.sum()
+
+        if pos_pred.nelement() == 0:
+            loss = -1 * neg_loss
+        else:
+            loss = loss - (pos_loss + neg_loss) / num_pos
+        return loss
 
 
 class RegLoss(nn.Module):
@@ -223,102 +88,42 @@ class RegL1Loss(nn.Module):
     def forward(self, output, mask, ind, target):
         pred = _transpose_and_gather_feat(output, ind)
         mask = mask.unsqueeze(2).expand_as(pred).float()
-        # loss = F.l1_loss(pred * mask, target * mask, reduction='elementwise_mean')
         loss = F.l1_loss(pred * mask, target * mask, size_average=False)
         loss = loss / (mask.sum() + 1e-4)
         return loss
 
 
-class NormRegL1Loss(nn.Module):
-    def __init__(self):
-        super(NormRegL1Loss, self).__init__()
+def _reg_loss(regr, gt_regr, mask):
+    """ L1 regression loss
+    Arguments:
+      regr (batch x max_objects x dim)
+      gt_regr (batch x max_objects x dim)
+      mask (batch x max_objects)
+  """
+    num = mask.float().sum()
+    mask = mask.unsqueeze(2).expand_as(gt_regr).float()
 
-    def forward(self, output, mask, ind, target):
-        pred = _transpose_and_gather_feat(output, ind)
-        mask = mask.unsqueeze(2).expand_as(pred).float()
-        # loss = F.l1_loss(pred * mask, target * mask, reduction='elementwise_mean')
-        pred = pred / (target + 1e-4)
-        target = target * 0 + 1
-        loss = F.l1_loss(pred * mask, target * mask, size_average=False)
-        loss = loss / (mask.sum() + 1e-4)
-        return loss
+    regr = regr * mask
+    gt_regr = gt_regr * mask
 
-
-class RegWeightedL1Loss(nn.Module):
-    def __init__(self):
-        super(RegWeightedL1Loss, self).__init__()
-
-    def forward(self, output, mask, ind, target):
-        pred = _transpose_and_gather_feat(output, ind)
-        mask = mask.float()
-        # loss = F.l1_loss(pred * mask, target * mask, reduction='elementwise_mean')
-        loss = F.l1_loss(pred * mask, target * mask, size_average=False)
-        loss = loss / (mask.sum() + 1e-4)
-        return loss
+    regr_loss = nn.functional.smooth_l1_loss(regr, gt_regr, size_average=False)
+    regr_loss = regr_loss / (num + 1e-4)
+    return regr_loss
 
 
-class L1Loss(nn.Module):
-    def __init__(self):
-        super(L1Loss, self).__init__()
-
-    def forward(self, output, mask, ind, target):
-        pred = _transpose_and_gather_feat(output, ind)
-        mask = mask.unsqueeze(2).expand_as(pred).float()
-        loss = F.l1_loss(pred * mask, target * mask, reduction='elementwise_mean')
-        return loss
+def _transpose_and_gather_feat(feat, ind):
+    feat = feat.permute(0, 2, 3, 1).contiguous()
+    feat = feat.view(feat.size(0), -1, feat.size(3))
+    feat = _gather_feat(feat, ind)
+    return feat
 
 
-class BinRotLoss(nn.Module):
-    def __init__(self):
-        super(BinRotLoss, self).__init__()
-
-    def forward(self, output, mask, ind, rotbin, rotres):
-        pred = _transpose_and_gather_feat(output, ind)
-        loss = compute_rot_loss(pred, rotbin, rotres, mask)
-        return loss
-
-
-def compute_res_loss(output, target):
-    return F.smooth_l1_loss(output, target, reduction='elementwise_mean')
-
-
-# TODO: weight
-def compute_bin_loss(output, target, mask):
-    mask = mask.expand_as(output)
-    output = output * mask.float()
-    return F.cross_entropy(output, target, reduction='elementwise_mean')
-
-
-def compute_rot_loss(output, target_bin, target_res, mask):
-    # output: (B, 128, 8) [bin1_cls[0], bin1_cls[1], bin1_sin, bin1_cos, 
-    #                 bin2_cls[0], bin2_cls[1], bin2_sin, bin2_cos]
-    # target_bin: (B, 128, 2) [bin1_cls, bin2_cls]
-    # target_res: (B, 128, 2) [bin1_res, bin2_res]
-    # mask: (B, 128, 1)
-    # import pdb; pdb.set_trace()
-    output = output.view(-1, 8)
-    target_bin = target_bin.view(-1, 2)
-    target_res = target_res.view(-1, 2)
-    mask = mask.view(-1, 1)
-    loss_bin1 = compute_bin_loss(output[:, 0:2], target_bin[:, 0], mask)
-    loss_bin2 = compute_bin_loss(output[:, 4:6], target_bin[:, 1], mask)
-    loss_res = torch.zeros_like(loss_bin1)
-    if target_bin[:, 0].nonzero().shape[0] > 0:
-        idx1 = target_bin[:, 0].nonzero()[:, 0]
-        valid_output1 = torch.index_select(output, 0, idx1.long())
-        valid_target_res1 = torch.index_select(target_res, 0, idx1.long())
-        loss_sin1 = compute_res_loss(
-            valid_output1[:, 2], torch.sin(valid_target_res1[:, 0]))
-        loss_cos1 = compute_res_loss(
-            valid_output1[:, 3], torch.cos(valid_target_res1[:, 0]))
-        loss_res += loss_sin1 + loss_cos1
-    if target_bin[:, 1].nonzero().shape[0] > 0:
-        idx2 = target_bin[:, 1].nonzero()[:, 0]
-        valid_output2 = torch.index_select(output, 0, idx2.long())
-        valid_target_res2 = torch.index_select(target_res, 0, idx2.long())
-        loss_sin2 = compute_res_loss(
-            valid_output2[:, 6], torch.sin(valid_target_res2[:, 1]))
-        loss_cos2 = compute_res_loss(
-            valid_output2[:, 7], torch.cos(valid_target_res2[:, 1]))
-        loss_res += loss_sin2 + loss_cos2
-    return loss_bin1 + loss_bin2 + loss_res
+def _gather_feat(feat, ind, mask=None):
+    dim = feat.size(2)
+    ind = ind.unsqueeze(2).expand(ind.size(0), ind.size(1), dim)
+    feat = feat.gather(1, ind)
+    if mask is not None:
+        mask = mask.unsqueeze(2).expand_as(feat)
+        feat = feat[mask]
+        feat = feat.view(-1, dim)
+    return feat

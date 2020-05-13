@@ -128,7 +128,7 @@ class CircleDataset(Dataset):
         # 2.1 output size: input//opt.down_ratio
         output_h = input_h // self.cfg.DOWN_RATIO
         output_w = input_w // self.cfg.DOWN_RATIO
-        num_classes = self.cfg.NUM_CLASSES
+        num_classes = self.cfg.NUM_CLASS
 
         trans_output = get_affine_transform(c, s, 0, [output_w, output_h])
         # 2.2 hm,wh,reg
@@ -150,7 +150,7 @@ class CircleDataset(Dataset):
         for k in range(len(boxes)):
             # 3.1 get bbox:[x1,y1,x2,y2] and classes
             bbox = np.array([boxes[k][0][0], boxes[k][0][1], boxes[k][1][0], boxes[k][1][1]])
-            cls_id = 1
+            cls_id = 0
             if flipped:
                 bbox[[0, 2]] = width - bbox[[2, 0]] - 1
             bbox[:2] = affine_transform(bbox[:2], trans_output)
@@ -181,9 +181,9 @@ class CircleDataset(Dataset):
                 gt_det.append([ct[0] - w / 2, ct[1] - h / 2,
                                ct[0] + w / 2, ct[1] + h / 2, 1, cls_id])
 
-        ret = {'input': inp, 'hm': hm, 'reg_mask': reg_mask, 'ind': ind, 'wh': wh}
+        label = {'hm': hm, 'reg_mask': reg_mask, 'ind': ind, 'wh': wh}
         hm_a = hm.max(axis=0, keepdims=True)
         dense_wh_mask = np.concatenate([hm_a, hm_a], axis=0)
-        ret.update({'dense_wh': dense_wh, 'dense_wh_mask': dense_wh_mask})
-        ret.update({'reg': reg})
-        return ret
+        label.update({'dense_wh': dense_wh, 'dense_wh_mask': dense_wh_mask})
+        label.update({'reg': reg})
+        return inp, label

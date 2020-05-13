@@ -18,7 +18,7 @@ def main():
     # os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus_str
     device = torch.device('cuda' if cfg.GPU[0] >= 0 else 'cpu')
     print('Creating model...')
-    model = create_model(cfg.ARCH, cfg.HEAD, cfg.HEAD_CONV)
+    model = create_model(cfg)
     optimizer = torch.optim.Adam(model.parameters(), cfg.LR)
     start_epoch = 0
     trainer = CircleTrainer(cfg, model, optimizer)
@@ -77,17 +77,21 @@ def test_dataloader():
                              num_workers=cfg.NUM_WORKERS,
                              pin_memory=True,
                              drop_last=True)
-    ret = data_loader.dataset.__getitem__(1)
-    print(ret.keys())  # dict_keys(['input', 'hm', 'reg_mask', 'ind', 'dense_wh', 'dense_wh_mask', 'reg'])
-    for key in ret.keys():
-        print(ret[key].shape)
-        # (3, 384, 512)
+    img, label = data_loader.dataset.__getitem__(1)
+    print(img.shape)
+    print(label.keys())  # dict_keys(['input', 'hm', 'reg_mask', 'ind', 'dense_wh', 'dense_wh_mask', 'reg'])
+    for key in label.keys():
+        print(label[key].shape)
+        # (1, 384, 512)
         # (2, 96, 128)
         # (128,)
         # (128,)
         # (2, 96, 128)
         # (2, 96, 128)
         # (128, 2)
+    # import matplotlib.pyplot as plt
+    # plt.imshow(label['hm'][0])
+    # plt.show()
 
 
 if __name__ == '__main__':

@@ -22,9 +22,9 @@ class Config(object):
     DEBUGGER_THEME = 'white'  # choices=['white', 'black']
 
     # model
-    NUM_CLASSES = 2
+    NUM_CLASS = 1
     ARCH = 'res_18'  # 'res_18 | res_101 |' hourglass'
-    HEAD = {'hm': NUM_CLASSES,
+    HEAD = {'hm': NUM_CLASS,
             'wh': 2,
             'reg': 2}
     HEAD_CONV = 64  # 0 for no conv layer', '64 for resnet'
@@ -60,20 +60,14 @@ class Config(object):
     COLOR_AUG = False  # not use the color augmentation
 
     # loss
-    MSE_LOSS = False  # use mse loss or focal loss to train key point heat maps
     REG_LOSS = 'l2'  # regression loss: sl1 | l1 | l2
     HM_WEIGHT = 1  # loss weight for key point heat maps
     OFF_WEIGHT = 1  # loss weight for key point local offsets
     WH_WEIGHT = 0.1  # loss weight for bounding box size
+
     NORM_WH = True  # 'L1(\hat(y) / y, 1) or L1(\hat(y), y)
     DENSE_WH = True  # apply weighted regression near center or just apply regression on center point
     CAT_SPEC_WH = True  # category specific bounding box size
-    NOT_REG_OFFSET = False  # not regress local offset
-
-    # ground truth validation
-    EVAL_ORACLE_HM = True  # use ground center heat map
-    EVAL_ORACLE_WH = True  # use ground truth bounding box size
-    EVAL_ORACLE_OFFSET = True  # use ground truth local heat map offset
 
 
 
