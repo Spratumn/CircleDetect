@@ -62,7 +62,7 @@ class Debugger(object):
             self.focal_length = 721.5377
             self.W = 1242
             self.H = 375
-        num_classes = len(self.names)
+        num_classes = 1
         self.down_ratio = down_ratio
         # for bird view
         self.world_size = 64
@@ -139,17 +139,18 @@ class Debugger(object):
         c = self.colors[cat][0][0].tolist()
         if self.theme == 'white':
             c = (255 - np.array(c)).tolist()
-        txt = '{}{:.1f}'.format(self.names[cat], conf)
+        # txt = '{}{:.1f}'.format(self.names[cat], conf)
+        txt = 'c'
         font = cv2.FONT_HERSHEY_SIMPLEX
         cat_size = cv2.getTextSize(txt, font, 0.5, 2)[0]
         cv2.rectangle(
-            self.imgs[img_id], (bbox[0], bbox[1]), (bbox[2], bbox[3]), c, 2)
+            self.imgs[img_id], (bbox[0], bbox[1]), (bbox[2], bbox[3]), c, 10)
         if show_txt:
             cv2.rectangle(self.imgs[img_id],
                           (bbox[0], bbox[1] - cat_size[1] - 2),
                           (bbox[0] + cat_size[0], bbox[1] - 2), c, -1)
-            cv2.putText(self.imgs[img_id], txt, (bbox[0], bbox[1] - 2),
-                        font, 0.5, (0, 0, 0), thickness=1, lineType=cv2.LINE_AA)
+            # cv2.putText(self.imgs[img_id], txt, (bbox[0], bbox[1] - 2),
+            #             font, 0.5, (0, 0, 0), thickness=1, lineType=cv2.LINE_AA)
 
     def add_coco_hp(self, points, img_id='default'):
         points = np.array(points, dtype=np.int32).reshape(self.num_joints, 2)

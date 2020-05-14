@@ -5,7 +5,7 @@ class Config(object):
     # system
     DATA_DIR = 'data'
     LOG_DIR = 'log'
-    WEIGHTS_DIR = 'models/weights'
+    WEIGHTS_DIR = 'log/weights'
     OUTPUT_DIR = 'output'
     GPU = [0]
     DEVICE = 'cuda'
@@ -41,8 +41,8 @@ class Config(object):
     # train
     LR = 1.25e-4  # learning rate for batch size 32.
     LR_STEP = [90, 120]  # drop learning rate by 10.'
-    NUM_EPOCHS = 30  # total training epochs.
-    BATCH_SIZE = 4
+    NUM_EPOCHS = 5  # total training epochs.
+    BATCH_SIZE = 16
     VAL_INTERVALS = 5  # number of epochs to run validation.
 
     # test
@@ -50,6 +50,7 @@ class Config(object):
     TEST_SCALES = [1]  # multi scale test augmentation.
     NMS = True  # run nms in testing
     K = 100  # max number of output objects
+    CENTER_THRESH = 0.1  # threshold for centermap.
 
     # data augment
     RAND_CROP = True  # not use the random crop data augmentation

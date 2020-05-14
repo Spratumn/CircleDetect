@@ -2,7 +2,7 @@ import os
 import torch
 from torch.utils.data import DataLoader
 from config import Config
-from models.model import create_model, save_model
+from models.model import create_model, save_model, load_model
 from utils.logger import Logger
 from utils.trainer import CircleTrainer
 from utils.circledataset import CircleDataset
@@ -19,6 +19,7 @@ def main():
     device = torch.device('cuda' if cfg.GPU[0] >= 0 else 'cpu')
     print('Creating model...')
     model = create_model(cfg)
+    # model = load_model(model, 'log/weights/model_last.pth')
     optimizer = torch.optim.Adam(model.parameters(), cfg.LR)
     start_epoch = 0
     trainer = CircleTrainer(cfg, model, optimizer)
@@ -67,6 +68,7 @@ def main():
         #     for param_group in optimizer.param_groups:
         #         param_group['lr'] = lr
     # logger.close()
+    save_model(os.path.join(cfg.WEIGHTS_DIR, 'model_last.pth'), epoch, model, optimizer)
 
 
 def test_dataloader():

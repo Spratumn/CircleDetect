@@ -34,10 +34,10 @@ class FocalLoss(nn.Module):
 
     def forward(self, inputs, target):
         """
-        inputs: shape of (N,1,H,W)
-        target: shape of (N,1,H,W)
+        inputs: shape of (N,C,H,W)
+        target: shape of (N,C,H,W)
         """
-        inputs = F.sigmoid(inputs)
+        inputs = inputs.sigmoid_()
         inputs = torch.clamp(inputs, min=1e-4, max=1-1e-4)
 
         pos_inds = target.eq(1)
@@ -127,3 +127,21 @@ def _gather_feat(feat, ind, mask=None):
         feat = feat[mask]
         feat = feat.view(-1, dim)
     return feat
+
+
+if __name__ == '__main__':
+    target = torch.zeros(1, 2, 3, 3)
+    inputs = torch.zeros(1, 2, 3, 3)
+    target[0][0][0][1] = 1
+    target[0][1][1][1] = 1
+    inputs[0][0][0][1] = 1
+    inputs[0][0][1][2] = 1
+    inputs[0][1][1][0] = 1
+    inputs[0][1][1][1] = 1
+    print(inputs)
+    print(target)
+    loss = FocalLoss()
+    loss_val = loss(inputs, target)
+    print(loss_val)
+
+

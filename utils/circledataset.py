@@ -32,11 +32,20 @@ class CircleDataset(Dataset):
         super(CircleDataset, self).__init__()
         # read csv as data index
         self.cfg = cfg
+        # for circle detection
+        # self.data_paths = pd.read_csv(os.path.join(self.cfg.DATA_DIR, '{}.csv'.format(phase)),
+        #                               header=None,
+        #                               names=["image", "json"])
+        # self.image_paths = self.data_paths["image"].values[1:]
+        # self.json_paths = self.data_paths["json"].values[1:]
+
+        # for dog detection
         self.data_paths = pd.read_csv(os.path.join(self.cfg.DATA_DIR, '{}.csv'.format(phase)),
                                       header=None,
-                                      names=["image", "json"])
+                                      names=["image", "bbox"])
         self.image_paths = self.data_paths["image"].values[1:]
-        self.json_paths = self.data_paths["json"].values[1:]
+        self.bbox = self.data_paths["bbox"].values[1:]
+
         self.max_objs = 128
         self.class_name = ['__background__', 'circle']
 
@@ -140,16 +149,27 @@ class CircleDataset(Dataset):
         reg_mask = np.zeros((self.max_objs,), dtype=np.uint8)
 
         # 3.gt label process
-        json_path = self.json_paths[index]
-        boxes_dict = json.load(open(json_path, encoding='utf-8'))
-        boxes = boxes_dict['shapes']
-        # [[x1,y1],[x2,y2]], ...
-        boxes = [box['points'] for box in boxes]
         gt_det = []
+        # for circle detection
+        # json_path = self.json_paths[index]
+        # boxes_dict = json.load(open(json_path, encoding='utf-8'))
+        # boxes = boxes_dict['shapes']
+        # [[x1,y1],[x2,y2]], ...
+        # boxes = [box['points'] for box in boxes]
+
+        # for dog detection
+        boxes = [self.bbox[index]]  # x1xy1xx2xy2
+
         # for every bbox
         for k in range(len(boxes)):
             # 3.1 get bbox:[x1,y1,x2,y2] and classes
-            bbox = np.array([boxes[k][0][0], boxes[k][0][1], boxes[k][1][0], boxes[k][1][1]])
+            # for circle detection
+            # bbox = np.array([boxes[k][0][0], boxes[k][0][1], boxes[k][1][0], boxes[k][1][1]])
+
+            # for dog detection
+            bbox = boxes[k]
+            bbox = bbox.split('x')
+            bbox = np.array([int(val) for val in bbox])
             cls_id = 0
             if flipped:
                 bbox[[0, 2]] = width - bbox[[2, 0]] - 1
