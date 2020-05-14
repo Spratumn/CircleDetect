@@ -1,5 +1,5 @@
 import numpy as np
-from .image import transform_preds
+from utils.image_process import transform_preds
 
 
 def get_pred_depth(depth):

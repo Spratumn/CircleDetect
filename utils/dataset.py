@@ -1,25 +1,13 @@
 import pandas as pd
 import numpy as np
-import json
 import cv2
 import os
-from utils.image import flip, color_aug
-from utils.image import get_affine_transform, affine_transform
-from utils.image import gaussian_radius, draw_umich_gaussian, draw_msra_gaussian
-from utils.image import draw_dense_reg
 import math
 from torch.utils.data import Dataset
-
-
-def to_float(x):
-    return float("{:.2f}".format(x))
-
-
-def get_border(border, size):
-    i = 1
-    while size - border // i <= border // i:
-        i *= 2
-    return border // i
+import torch
+from utils.image_process import get_affine_transform, affine_transform, color_aug
+from utils.label_process import get_bbox_from_json, get_gaussian_radius, draw_dense_reg, draw_gaussian
+from utils.plot import plot_hm
 
 
 class CircleDataset(Dataset):
@@ -151,11 +139,7 @@ class CircleDataset(Dataset):
         # 3.gt label process
         gt_det = []
         # for circle detection
-        # json_path = self.json_paths[index]
-        # boxes_dict = json.load(open(json_path, encoding='utf-8'))
-        # boxes = boxes_dict['shapes']
-        # [[x1,y1],[x2,y2]], ...
-        # boxes = [box['points'] for box in boxes]
+        # boxes = get_bbox_from_json(self.bbox[index])
 
         # for dog detection
         boxes = [self.bbox[index]]  # x1xy1xx2xy2
@@ -164,15 +148,16 @@ class CircleDataset(Dataset):
         for k in range(len(boxes)):
             # 3.1 get bbox:[x1,y1,x2,y2] and classes
             # for circle detection
-            # bbox = np.array([boxes[k][0][0], boxes[k][0][1], boxes[k][1][0], boxes[k][1][1]])
+            # bbox = bboxs[k]
 
             # for dog detection
             bbox = boxes[k]
             bbox = bbox.split('x')
             bbox = np.array([int(val) for val in bbox])
-            cls_id = 0
+
             if flipped:
                 bbox[[0, 2]] = width - bbox[[2, 0]] - 1
+            # transform same as input image
             bbox[:2] = affine_transform(bbox[:2], trans_output)
             bbox[2:] = affine_transform(bbox[2:], trans_output)
             bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, output_w - 1)
@@ -181,14 +166,17 @@ class CircleDataset(Dataset):
             # make sure bbox valid
             if h > 0 and w > 0:
                 # 3.2 get gaussian radius by size of (h,w)
-                radius = gaussian_radius((math.ceil(h), math.ceil(w)))  # math.ceil(h) 向上取整
-                radius = max(0, int(radius))
+                radius = get_gaussian_radius((math.ceil(h), math.ceil(w)))  # math.ceil(h) 向上取整
+                print(radius)
+                print(get_gaussian_radius(math.ceil(h), math.ceil(w)))
                 ct = np.array(
                     [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
                 ct_int = ct.astype(np.int32)
                 # 3.3 process hm,wh,reg
                 # 3.3.1 draw gaussian on hm[class_id] with center and radius
-                draw_umich_gaussian(hm[cls_id], ct_int, radius)
+                plot_hm(hm[0])
+                draw_gaussian(hm[0], ct_int, radius)
+                plot_hm(hm[0])
                 # 3.3.2 kth box w,h in 'wh'
                 wh[k] = 1. * w, 1. * h
                 ind[k] = ct_int[1] * output_w + ct_int[0]
@@ -199,11 +187,22 @@ class CircleDataset(Dataset):
                 # apply weighted regression near center not only just apply regression on center point
                 draw_dense_reg(dense_wh, hm.max(axis=0), ct_int, wh[k], radius)
                 gt_det.append([ct[0] - w / 2, ct[1] - h / 2,
-                               ct[0] + w / 2, ct[1] + h / 2, 1, cls_id])
+                               ct[0] + w / 2, ct[1] + h / 2, 1, 0])
 
         label = {'hm': hm, 'reg_mask': reg_mask, 'ind': ind, 'wh': wh}
+        print(hm.shape)
         hm_a = hm.max(axis=0, keepdims=True)
+        print(hm_a)
+        cv2.imwrite('hm_a.png', hm[0])
         dense_wh_mask = np.concatenate([hm_a, hm_a], axis=0)
         label.update({'dense_wh': dense_wh, 'dense_wh_mask': dense_wh_mask})
         label.update({'reg': reg})
         return inp, label
+
+
+def get_border(border, size):
+    i = 1
+    while size - border // i <= border // i:
+        i *= 2
+    return border // i
+

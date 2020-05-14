@@ -1,34 +1,84 @@
-import numpy as np
 import json
-import cv2
+import math
+import numpy as np
 
 
-def get_bbox(json_file):
-    """ get circle boxes with center and w,h"""
+def get_bbox_from_json(json_file):
+    """ get boxes[x1,y1,x2,y2]  with center and w,h from json file"""
     boxes_dict = json.load(open(json_file, encoding='utf-8'))
     boxes = boxes_dict['shapes']
-    img_data = boxes_dict['imageData']
-    img_path = boxes_dict['imagePath']
-    img_size = [boxes_dict['imageHeight'], boxes_dict['imageWidth']]
-    print(img_path)
-    print(img_size)
     # [[x1,y1],[x2,y2]], ...
     boxes = [box['points'] for box in boxes]
     # boxes[0][0][0]  # x1
     # boxes[0][0][1]  # y1
     # boxes[0][1][0]  # x2
     # boxes[0][1][1]  # y2
-    boxes = [[((box[0][0] + box[1][0])/2, (box[0][1] + box[1][1])/2),  # [xc,yc]
-              box[1][0] - box[0][0],  # w
-              box[1][1] - box[0][1]  # h
-              ]
+    boxes = [[box[0][0], box[0][1], box[1][0], box[1][1]]
              for box in boxes]
+    return boxes
 
-    return img_data, boxes
+
+def get_gaussian_radius(h, w, min_iou=0.7):
+    assert 0 < min_iou < 1
+    return int((1 - math.sqrt(min_iou)) * math.sqrt(h**2 + w**2))
 
 
-if __name__ == '__main__':
-    json_path = '../data/mould02.json'
-    data, boxes = get_bbox(json_path)
+def gaussian2D(shape, sigma=1):
+    m, n = [(ss - 1.) / 2. for ss in shape]
+    y, x = np.ogrid[-m:m + 1, -n:n + 1]
+
+    h = np.exp(-(x * x + y * y) / (2 * sigma * sigma))
+    h[h < np.finfo(h.dtype).eps * h.max()] = 0
+    return h
+
+
+def draw_gaussian(heatmap, center, radius, k=1):
+    diameter = 2 * radius + 1
+    gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)
+
+    x, y = int(center[0]), int(center[1])
+
+    height, width = heatmap.shape[0:2]
+
+    left, right = min(x, radius), min(width - x, radius + 1)
+    top, bottom = min(y, radius), min(height - y, radius + 1)
+
+    masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
+    masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
+    if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0:  # TODO debug
+        np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
+    return heatmap
+
+
+def draw_dense_reg(regmap, heatmap, center, value, radius, is_offset=False):
+    diameter = 2 * radius + 1
+    gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)
+    value = np.array(value, dtype=np.float32).reshape(-1, 1, 1)
+    dim = value.shape[0]
+    reg = np.ones((dim, diameter * 2 + 1, diameter * 2 + 1), dtype=np.float32) * value
+    if is_offset and dim == 2:
+        delta = np.arange(diameter * 2 + 1) - radius
+        reg[0] = reg[0] - delta.reshape(1, -1)
+        reg[1] = reg[1] - delta.reshape(-1, 1)
+
+    x, y = int(center[0]), int(center[1])
+
+    height, width = heatmap.shape[0:2]
+
+    left, right = min(x, radius), min(width - x, radius + 1)
+    top, bottom = min(y, radius), min(height - y, radius + 1)
+
+    masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
+    masked_regmap = regmap[:, y - top:y + bottom, x - left:x + right]
+    masked_gaussian = gaussian[radius - top:radius + bottom,
+                      radius - left:radius + right]
+    masked_reg = reg[:, radius - top:radius + bottom,
+                 radius - left:radius + right]
+    if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0:  # TODO debug
+        idx = (masked_gaussian >= masked_heatmap).reshape(
+            1, masked_gaussian.shape[0], masked_gaussian.shape[1])
+        masked_regmap = (1 - idx) * masked_regmap + idx * masked_reg
+    regmap[:, y - top:y + bottom, x - left:x + right] = masked_regmap
+    return regmap
 
 

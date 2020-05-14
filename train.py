@@ -5,7 +5,7 @@ from config import Config
 from models.model import create_model, save_model, load_model
 from utils.logger import Logger
 from utils.trainer import CircleTrainer
-from utils.circledataset import CircleDataset
+from utils.dataset import CircleDataset
 
 
 def main():
@@ -74,7 +74,7 @@ def main():
 def test_dataloader():
     cfg = Config()
     data_loader = DataLoader(CircleDataset(cfg, 'train'),
-                             batch_size=cfg.BATCH_SIZE,
+                             batch_size=1,  # cfg.BATCH_SIZE,
                              shuffle=True,
                              num_workers=cfg.NUM_WORKERS,
                              pin_memory=True,
@@ -97,7 +97,7 @@ def test_dataloader():
 
 
 if __name__ == '__main__':
-    main()
+    test_dataloader()
 
 
 
