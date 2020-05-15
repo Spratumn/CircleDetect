@@ -4,7 +4,7 @@ import cv2
 
 from models.decode import decode
 from models.utils import flip_tensor
-from utils.image import get_affine_transform
+from utils.image_process import get_affine_transform
 from utils.post_process import post_process
 from utils.debugger import Debugger
 from models.model import create_model, load_model
@@ -117,19 +117,33 @@ class Detector:
             detections.append(dets)
         results = self.merge_outputs(detections)
         # self.show_results(debugger, image, results)
-        print(len(results[1]))
-        bbox = results[1][5][0:4]
-        print(bbox)
-
         return {'results': results}
 
 
 if __name__ == '__main__':
-    # detecter = Detector('log/weights/model_last.pth')
-    # result = detecter.run('data/dataset/great_pyrenees_153.jpg')
-    # print(result['results'])
-    img = cv2.imread('data/dataset/great_pyrenees_153.jpg')
-    cv2.rectangle(img,(370,134),(371,135),(0,0,255),2)
+    import pandas as pd
+    detecter = Detector('log/weights/model_last.pth')
+
+    test_data_path = pd.read_csv('data/test.csv',
+                                 header=None,
+                                 names=["image", "bbox"])
+    image_paths = test_data_path["image"].values[1:]
+    bbox = test_data_path["bbox"].values[1:]
+    test_img_path = image_paths[30]
+    test_bbox = bbox[30]
+    test_bbox = test_bbox.split('x')
+    test_bbox = np.array([int(val) for val in test_bbox])
+    results = detecter.run(test_img_path)
+    detects = results['results'][1]
+    img = cv2.imread(test_img_path)
+    for i in range(1):
+        rect = detects[i]
+        cv2.rectangle(img,(rect[0],rect[1]),(rect[2],rect[3]),(255,0,0),4)
+    detects = results['results'][2]
+    for i in range(1):
+        rect = detects[i]
+        cv2.rectangle(img,(rect[0],rect[1]),(rect[2],rect[3]),(0,0,255),2)
+    cv2.rectangle(img,(test_bbox[0],test_bbox[1]),(test_bbox[2],test_bbox[3]),(0,255,0),2)
     cv2.imshow('',img)
     cv2.waitKey(0)
 

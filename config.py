@@ -22,7 +22,7 @@ class Config(object):
     DEBUGGER_THEME = 'white'  # choices=['white', 'black']
 
     # model
-    NUM_CLASS = 1
+    NUM_CLASS = 2
     ARCH = 'res_18'  # 'res_18 | res_101 |' hourglass'
     HEAD = {'hm': NUM_CLASS,
             'wh': 2,
@@ -41,8 +41,8 @@ class Config(object):
     # train
     LR = 1.25e-4  # learning rate for batch size 32.
     LR_STEP = [90, 120]  # drop learning rate by 10.'
-    NUM_EPOCHS = 5  # total training epochs.
-    BATCH_SIZE = 16
+    NUM_EPOCHS = 10  # total training epochs.
+    BATCH_SIZE = 6
     VAL_INTERVALS = 5  # number of epochs to run validation.
 
     # test
@@ -68,7 +68,7 @@ class Config(object):
 
     NORM_WH = True  # 'L1(\hat(y) / y, 1) or L1(\hat(y), y)
     DENSE_WH = True  # apply weighted regression near center or just apply regression on center point
-    CAT_SPEC_WH = True  # category specific bounding box size
+    CAT_SPEC_WH = False  # category specific bounding box size
 
 
 

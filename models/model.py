@@ -5,7 +5,7 @@ from models.circlenet import CircleNet
 
 
 def create_model(cfg):
-    backbone = resnet18()
+    backbone = resnet50()
     model = CircleNet(backbone, num_class=cfg.NUM_CLASS, head_conv=cfg.HEAD_CONV)
     return model
 

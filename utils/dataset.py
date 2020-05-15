@@ -4,9 +4,9 @@ import cv2
 import os
 import math
 from torch.utils.data import Dataset
-import torch
+
 from utils.image_process import get_affine_transform, affine_transform, color_aug
-from utils.label_process import get_bbox_from_json, get_gaussian_radius, draw_dense_reg, draw_gaussian
+from utils.label_process import get_bbox_from_json, get_gaussian_radius, gaussian2D ,draw_dense_wh, draw_gaussian
 from utils.plot import plot_hm
 
 
@@ -15,6 +15,7 @@ class CircleDataset(Dataset):
     load images and labels
     images: add augment
     labels: boxes:[[x1,y1],[x2,y2]]-->[[xc,yc],w,h]-->gaussian
+    x->w;y->h
     """
     def __init__(self, cfg, phase):
         super(CircleDataset, self).__init__()
@@ -143,7 +144,7 @@ class CircleDataset(Dataset):
 
         # for dog detection
         boxes = [self.bbox[index]]  # x1xy1xx2xy2
-
+        class_id = 1  # set class_id with bboxs
         # for every bbox
         for k in range(len(boxes)):
             # 3.1 get bbox:[x1,y1,x2,y2] and classes
@@ -166,34 +167,29 @@ class CircleDataset(Dataset):
             # make sure bbox valid
             if h > 0 and w > 0:
                 # 3.2 get gaussian radius by size of (h,w)
-                radius = get_gaussian_radius((math.ceil(h), math.ceil(w)))  # math.ceil(h) 向上取整
-                print(radius)
-                print(get_gaussian_radius(math.ceil(h), math.ceil(w)))
+                radius = get_gaussian_radius(math.ceil(h), math.ceil(w))  # math.ceil(h) 向上取整
+                diameter = 2 * radius + 1
+                gaussian = gaussian2D((diameter, diameter), diameter / 6)
                 ct = np.array(
                     [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
                 ct_int = ct.astype(np.int32)
                 # 3.3 process hm,wh,reg
-                # 3.3.1 draw gaussian on hm[class_id] with center and radius
-                plot_hm(hm[0])
-                draw_gaussian(hm[0], ct_int, radius)
-                plot_hm(hm[0])
-                # 3.3.2 kth box w,h in 'wh'
+                # 3.3.1 kth box w,h in 'wh'
                 wh[k] = 1. * w, 1. * h
-                ind[k] = ct_int[1] * output_w + ct_int[0]
-                # 3.3.3 kth box regression
+                ind[k] = ct_int[1] * output_w + ct_int[0]  # 2D->1D index value of center
+                # 3.3.2 kth box regression
                 reg[k] = ct - ct_int
-                # 3.3.4 kth box regression mark
+                # 3.3.3 kth box regression mark
                 reg_mask[k] = 1
-                # apply weighted regression near center not only just apply regression on center point
-                draw_dense_reg(dense_wh, hm.max(axis=0), ct_int, wh[k], radius)
+                # 3.3.4 draw dense_wh first
+                draw_dense_wh(dense_wh, hm.max(axis=0), ct_int, wh[k], gaussian, radius)
+                # 3.3.5 draw gaussian on hm[class_id] with center and radius
+                draw_gaussian(hm[class_id], ct_int, gaussian, radius)
                 gt_det.append([ct[0] - w / 2, ct[1] - h / 2,
                                ct[0] + w / 2, ct[1] + h / 2, 1, 0])
 
         label = {'hm': hm, 'reg_mask': reg_mask, 'ind': ind, 'wh': wh}
-        print(hm.shape)
         hm_a = hm.max(axis=0, keepdims=True)
-        print(hm_a)
-        cv2.imwrite('hm_a.png', hm[0])
         dense_wh_mask = np.concatenate([hm_a, hm_a], axis=0)
         label.update({'dense_wh': dense_wh, 'dense_wh_mask': dense_wh_mask})
         label.update({'reg': reg})
