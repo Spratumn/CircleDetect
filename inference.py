@@ -129,21 +129,26 @@ if __name__ == '__main__':
                                  names=["image", "bbox"])
     image_paths = test_data_path["image"].values[1:]
     bbox = test_data_path["bbox"].values[1:]
-    test_img_path = image_paths[30]
-    test_bbox = bbox[30]
-    test_bbox = test_bbox.split('x')
-    test_bbox = np.array([int(val) for val in test_bbox])
-    results = detecter.run(test_img_path)
-    detects = results['results'][1]
-    img = cv2.imread(test_img_path)
-    for i in range(1):
-        rect = detects[i]
-        cv2.rectangle(img,(rect[0],rect[1]),(rect[2],rect[3]),(255,0,0),4)
-    detects = results['results'][2]
-    for i in range(1):
-        rect = detects[i]
-        cv2.rectangle(img,(rect[0],rect[1]),(rect[2],rect[3]),(0,0,255),2)
-    cv2.rectangle(img,(test_bbox[0],test_bbox[1]),(test_bbox[2],test_bbox[3]),(0,255,0),2)
-    cv2.imshow('',img)
-    cv2.waitKey(0)
+    for test_indx in range(len(image_paths)):
+        test_img_path = image_paths[test_indx]
+        # print(test_img_path)
+        test_bbox = bbox[test_indx]
+        test_bbox = test_bbox.split('x')
+        test_bbox = np.array([int(val) for val in test_bbox])
+        img = cv2.imread(test_img_path)
+        results = detecter.run(test_img_path)
+        # detects = results['results'][1]
+        #
+        # for i in range(1):
+        #     rect = detects[i]
+        #     cv2.rectangle(img,(rect[0],rect[1]),(rect[2],rect[3]),(255,0,0),4)
+        detects = results['results'][2]
+        for i in range(1):
+            rect = detects[i]
+            cv2.rectangle(img,(rect[0], rect[1]), (rect[2], rect[3]), (0, 0, 255),2)
+        cv2.rectangle(img, (test_bbox[0], test_bbox[1]), (test_bbox[2], test_bbox[3]),(0,255,0),2)
+        # cv2.imshow('',img)
+        # cv2.waitKey(0)
+        file_name = test_img_path.split('/')[-1]
+        cv2.imwrite('output/dog_test/'+file_name, img)
 

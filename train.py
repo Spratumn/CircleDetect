@@ -19,7 +19,7 @@ def main():
     device = torch.device('cuda' if cfg.GPU[0] >= 0 else 'cpu')
     print('Creating model...')
     model = create_model(cfg)
-    # model = load_model(model, 'log/weights/model_last.pth')
+    model = load_model(model, 'log/weights/model_last.pth')
     optimizer = torch.optim.Adam(model.parameters(), cfg.LR)
     start_epoch = 0
     trainer = CircleTrainer(cfg, model, optimizer)
