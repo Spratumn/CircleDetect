@@ -138,27 +138,27 @@ class ResNet(nn.Module):
 
 
 # define net create function
-def resnet18():
+def res_18():
     return ResNet(BasicBlock, [2, 2, 2, 2], 12)
 
 
-def resnet34():
+def res_34():
     return ResNet(BasicBlock, [3, 4, 6, 3], 12)
 
 
-def resnet50():
+def res_50():
     return ResNet(Bottleneck, [3, 4, 6, 3], 12)
 
 
-def resnet101():
+def res_101():
     return ResNet(Bottleneck, [3, 4, 23, 3], 12)
 
 
-def resnet152():
+def res_152():
     return ResNet(Bottleneck, [3, 8, 36, 3], 12)
 
 
 if __name__ == '__main__':
     from torchsummary import summary
-    rs = resnet18()
+    rs = res_18()
     summary(rs, (3, 224, 224), device='cpu')

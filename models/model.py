@@ -1,12 +1,10 @@
 import torch
 
-from models.resnet import resnet18, resnet34, resnet50
-from models.circlenet import CircleNet
+from models.centernet import CenterNet
 
 
 def create_model(cfg):
-    backbone = resnet50()
-    model = CircleNet(backbone, num_class=cfg.NUM_CLASS, head_conv=cfg.HEAD_CONV)
+    model = CenterNet(cfg)
     return model
 
 
@@ -80,6 +78,8 @@ def save_model(path, epoch, model, optimizer=None):
 
 if __name__ == '__main__':
     from torchsummary import summary
-    backbone = resnet18()
-    model = CircleNet(backbone, num_class=1, head_conv=64)
+    from config import Config
+    cfg = Config()
+
+    model = CenterNet(cfg)
     summary(model, (3, 512, 512), device='cpu')

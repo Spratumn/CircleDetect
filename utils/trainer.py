@@ -1,5 +1,4 @@
 import torch
-import time
 
 from models.losses import CircleLoss
 from models.data_parallel import DataParallel
@@ -11,7 +10,10 @@ class CircleTrainer:
         self.cfg = cfg
         self.optimizer = optimizer
         self.model = model
-        self.loss_stats = ['loss', 'hm_loss', 'wh_loss', 'off_loss']
+        if cfg.USE_OFFSET:
+            self.loss_stats = ['total_loss', 'hm_loss', 'wh_loss', 'offset_loss']
+        else:
+            self.loss_stats = ['total_loss', 'hm_loss', 'wh_loss']
         self.loss = CircleLoss(cfg)
 
     def set_device(self, gpus, device):

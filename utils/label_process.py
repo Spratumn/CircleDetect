@@ -1,7 +1,6 @@
 import json
 import math
 import numpy as np
-from utils.plot import plot_hm
 
 
 def get_bbox_from_json(json_file):

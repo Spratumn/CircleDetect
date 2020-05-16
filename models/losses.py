@@ -8,21 +8,28 @@ class CircleLoss(nn.Module):
         super(CircleLoss, self).__init__()
         self.hm_loss = FocalLoss()
         self.wh_loss = nn.L1Loss()
-        self.reg_loss = RegL1Loss() if cfg.REG_LOSS == 'l1' else RegLoss()
+        if cfg.USE_OFFSET:
+            self.offset_loss = RegL1Loss() if cfg.OFFSET_LOSS == 'l1' else RegLoss()
         self.cfg = cfg
 
     def forward(self, output, label):
         cfg = self.cfg
-        res_hm_loss = self.hm_loss(output['hm'], label['hm'])
-        print(res_hm_loss)
-        res_wh_loss = self.wh_loss(output['wh'] * label['dense_wh_mask'], label['dense_wh'] * label['dense_wh_mask'])
-        print(res_wh_loss)
-        res_off_loss = self.reg_loss(output['reg'], label['reg_mask'], label['ind'], label['reg'])
-        print(res_off_loss)
-        loss = cfg.HM_WEIGHT * res_hm_loss + cfg.WH_WEIGHT * res_wh_loss + cfg.OFF_WEIGHT * res_off_loss
-        loss_stats = {'loss': loss, 'hm_loss': res_hm_loss,
-                      'wh_loss': res_wh_loss, 'off_loss': res_off_loss}
-        return loss, loss_stats
+        total_hm_loss = self.hm_loss(output['hm'], label['hm'])
+        total_wh_loss = self.wh_loss(output['wh'] * label['dense_wh_mask'], label['dense_wh'] * label['dense_wh_mask'])
+        if self.cfg.USE_OFFSET:
+            total_offset_loss = self.offset_loss(output['offset'], label['offset_mask'], label['ind'], label['offset'])
+            total_loss = cfg.HM_WEIGHT * total_hm_loss \
+                         + cfg.WH_WEIGHT * total_wh_loss \
+                         + cfg.OFF_WEIGHT * total_offset_loss
+            loss_stats = {'total_loss': total_loss, 'hm_loss': total_hm_loss,
+                          'wh_loss': total_wh_loss, 'offset_loss': total_offset_loss}
+        else:
+            total_loss = cfg.HM_WEIGHT * total_hm_loss + cfg.WH_WEIGHT * total_wh_loss
+            loss_stats = {'total_loss': total_loss, 'hm_loss': total_hm_loss,
+                          'wh_loss': total_wh_loss}
+
+        print(loss_stats)
+        return total_loss, loss_stats
 
 
 class FocalLoss(nn.Module):
@@ -38,7 +45,7 @@ class FocalLoss(nn.Module):
         target: shape of (N,C,H,W)
         """
         inputs = inputs.sigmoid_()
-        inputs = torch.clamp(inputs, min=1e-4, max=1-1e-4)
+        inputs = torch.clamp(inputs, min=1e-4, max=1 - 1e-4)
 
         pos_inds = target.eq(1)
         neg_inds = target.lt(1)
@@ -143,5 +150,3 @@ if __name__ == '__main__':
     loss = FocalLoss()
     loss_val = loss(inputs, target)
     print(loss_val)
-
-

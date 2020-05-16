@@ -6,16 +6,15 @@ from models.decode import decode
 from models.utils import flip_tensor
 from utils.image_process import get_affine_transform
 from utils.post_process import post_process
-from utils.debugger import Debugger
 from models.model import create_model, load_model
 from utils.nms import nms
 from config import Config
 
 
 class Detector:
-    def __init__(self, model_path):
+    def __init__(self, model_path, cfg):
         super(Detector, self).__init__()
-        self.cfg = Config()
+        self.cfg = cfg
         print('Creating model...')
         self.model = create_model(self.cfg)
         self.model = load_model(self.model, model_path)
@@ -24,7 +23,7 @@ class Detector:
 
         self.mean = np.array(self.cfg.DATA_MEAN, dtype=np.float32).reshape(1, 1, 3)
         self.std = np.array(self.cfg.DATA_STD, dtype=np.float32).reshape(1, 1, 3)
-        self.max_per_image = 100
+        self.max_per_image = 10
         self.scales = self.cfg.TEST_SCALES
         self.pause = True
 
@@ -35,18 +34,20 @@ class Detector:
 
         inp_height = (new_height | self.cfg.PAD) + 1
         inp_width = (new_width | self.cfg.PAD) + 1
+
         c = np.array([new_width // 2, new_height // 2], dtype=np.float32)
         s = np.array([inp_width, inp_height], dtype=np.float32)
 
         trans_input = get_affine_transform(c, s, 0, [inp_width, inp_height])
         resized_image = cv2.resize(image, (new_width, new_height))
-        inp_image = cv2.warpAffine(
-            resized_image, trans_input, (inp_width, inp_height),
-            flags=cv2.INTER_LINEAR)
+        inp_image = cv2.warpAffine(resized_image, trans_input,
+                                   (inp_width, inp_height),
+                                   flags=cv2.INTER_LINEAR)
         inp_image = ((inp_image / 255. - self.mean) / self.std).astype(np.float32)
 
         images = inp_image.transpose(2, 0, 1).reshape(1, 3, inp_height, inp_width)
 
+        # flip image by width axes then concat two image as batch_size = 2
         if self.cfg.FLIP_TEST:
             images = np.concatenate((images, images[:, :, :, ::-1]), axis=0)
         images = torch.from_numpy(images)
@@ -60,95 +61,122 @@ class Detector:
             output = self.model(images)
             hm = output['hm'].sigmoid_()
             wh = output['wh']
-            reg = output['reg']
+            if self.cfg.USE_OFFSET:
+                offset = output['offset']
+            else:
+                offset = None
+
             if self.cfg.FLIP_TEST:
+                # flip hm[1] then get mean(hm[0], hm[1])
                 hm = (hm[0:1] + flip_tensor(hm[1:2])) / 2
+                # flip wh[1] then get mean(wh[0], wh[1])
                 wh = (wh[0:1] + flip_tensor(wh[1:2])) / 2
-                reg = reg[0:1]
-            dets = decode(hm, wh, reg=reg, cat_spec_wh=self.cfg.CAT_SPEC_WH, K=self.cfg.K)
-        return output, dets
+                if self.cfg.USE_OFFSET:
+                    offset = (offset[0:1] + flip_tensor(offset[1:2])) / 2
+            dets = decode(hm, wh, offset, K=self.cfg.K)
+            # dets: shape of [N,K,6]. det:[x1,y1,x2,y2,score,class_id] in down_sample size
+        return dets
 
     def post_process(self, dets, meta, scale=1):
         dets = dets.detach().cpu().numpy()
-        dets = dets.reshape(1, -1, dets.shape[2])
-        dets = post_process(
-            dets.copy(), [meta['c']], [meta['s']],
-            meta['out_height'], meta['out_width'], self.cfg.NUM_CLASS)
-        for j in range(1, self.cfg.NUM_CLASS + 1):
-            dets[0][j] = np.array(dets[0][j], dtype=np.float32).reshape(-1, 5)
-            dets[0][j][:, :4] /= scale
-        return dets[0]
+        # [N,K,6] -> [1, N*K, 6]
+        dets = dets.reshape(-1, dets.shape[2])
+        dets = post_process(dets.copy(), [meta['c']], [meta['s']],
+                            meta['out_height'], meta['out_width'], self.cfg.NUM_CLASS, score_thresh=0.1)
+
+        for j in range(1, self.cfg.NUM_CLASS):
+            dets[j] = np.array(dets[j], dtype=np.float32).reshape(-1, 5)
+            dets[j][:, :4] /= scale
+        return dets
 
     def merge_outputs(self, detections):
-        results = {}
-        for j in range(1, self.cfg.NUM_CLASS + 1):
-            results[j] = np.concatenate(
-                [detection[j] for detection in detections], axis=0).astype(np.float32)
+        # detections: list of dets, dets: detection dict{1:det_array,2:det_array...}. det_array: shape of [k,5]
+        # return: {1:det_array,2:det_array...}. det_array: shape of [k,5]
+        res_dets = {}
+        for j in range(1, self.cfg.NUM_CLASS):
+            res_dets[j] = np.concatenate(
+                [dets[j] for dets in detections], axis=0).astype(np.float32)
             if len(self.scales) > 1 or self.cfg.NMS:
-                res_index = nms(results[j], 0.5)
-                results[j] = results[j][res_index]
-        scores = np.hstack(
-            [results[j][:, 4] for j in range(1, self.cfg.NUM_CLASS + 1)])
+                res_index = nms(res_dets[j], 0.5)
+                res_dets[j] = res_dets[j][res_index]
+
+        scores = np.hstack([res_dets[j][:, 4] for j in range(1, self.cfg.NUM_CLASS)])
         if len(scores) > self.max_per_image:
             kth = len(scores) - self.max_per_image
             thresh = np.partition(scores, kth)[kth]
-            for j in range(1, self.cfg.NUM_CLASS + 1):
-                keep_inds = (results[j][:, 4] >= thresh)
-                results[j] = results[j][keep_inds]
-        return results
+            for j in range(1, self.cfg.NUM_CLASS):
+                keep_inds = (res_dets[j][:, 4] >= thresh)
+                res_dets[j] = res_dets[j][keep_inds]
+        return res_dets
 
-    def show_results(self, debugger, image, results):
-        debugger.add_img(image)
-        for j in range(1, self.cfg.NUM_CLASS + 1):
-            for bbox in results[j]:
-                if bbox[4] > self.cfg.VIS_THRESH:
-                    debugger.add_coco_bbox(bbox[:4], j - 1, bbox[4])
-        debugger.show_all_imgs(pause=self.pause)
+    def draw_results(self, image, result, max_per_class=1):
+        # result: {1:det_array,2:det_array...}. det_array: shape of [k,5]
 
-    def run(self, image_path):
-        debugger = Debugger(num_classes=1)
+        class_id_name = {1: 'cat: ',
+                         2: 'dog: '}
+        img = image
+        for i in range(1, self.cfg.NUM_CLASS):
+            rets = result[i]
+            obj_count = min(rets.shape[0], max_per_class)
+            for j in range(obj_count):
+                text_str = class_id_name[i] + str(round(rets[j][4], 3))
+                cv2.putText(img, text_str, (rets[j][0], int(rets[j][1]-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255))
+                cv2.rectangle(img,
+                              (rets[j][0], rets[j][1]), (rets[j][2], rets[j][3]),
+                              (0, 0, 255), 2)
+        return img
+
+    def run(self, image_path, draw_result=False):
+        # return: {1:det_array,2:det_array...}. det_array: shape of [k,5]
         image = cv2.imread(image_path)
         detections = []
         for scale in self.scales:
             images, meta = self.pre_process(image, scale)
             images = images.to(self.cfg.DEVICE)
-            output, dets = self.process(images)
+            # dets: shape of [N,K,6]. det:[x1,y1,x2,y2,score,class_id]
+            dets = self.process(images)
+            # dets: detection dict{1:det_array,2:det_array...}. det_array: shape of [k,5]
             dets = self.post_process(dets, meta, scale)
             detections.append(dets)
-        results = self.merge_outputs(detections)
-        # self.show_results(debugger, image, results)
-        return {'results': results}
+        result = self.merge_outputs(detections)
+        if draw_result:
+            image = self.draw_results(image, result)
+            image_name = image_path.split('/')[-1]
+            output_path = 'output/image test/' + image_name
+            cv2.imwrite(output_path, image)
+
+        return result
 
 
 if __name__ == '__main__':
     import pandas as pd
-    detecter = Detector('log/weights/model_last.pth')
+    import time
+    cfg = Config()
 
+    start = time.time()
+    detecter = Detector('log/weights/model_last.pth', cfg)
+    # detecter.run('data/eee.jpg', draw_result=True)
     test_data_path = pd.read_csv('data/test.csv',
                                  header=None,
-                                 names=["image", "bbox"])
+                                 names=["image", "bbox", "class_id"])
     image_paths = test_data_path["image"].values[1:]
     bbox = test_data_path["bbox"].values[1:]
-    for test_indx in range(len(image_paths)):
+    print('load model cost: ', time.time()-start)
+
+    for test_indx in range(1, 180):
+        start = time.time()
         test_img_path = image_paths[test_indx]
-        # print(test_img_path)
+        print(test_img_path)
         test_bbox = bbox[test_indx]
         test_bbox = test_bbox.split('x')
         test_bbox = np.array([int(val) for val in test_bbox])
-        img = cv2.imread(test_img_path)
-        results = detecter.run(test_img_path)
-        # detects = results['results'][1]
-        #
-        # for i in range(1):
-        #     rect = detects[i]
-        #     cv2.rectangle(img,(rect[0],rect[1]),(rect[2],rect[3]),(255,0,0),4)
-        detects = results['results'][2]
-        for i in range(1):
-            rect = detects[i]
-            cv2.rectangle(img,(rect[0], rect[1]), (rect[2], rect[3]), (0, 0, 255),2)
-        cv2.rectangle(img, (test_bbox[0], test_bbox[1]), (test_bbox[2], test_bbox[3]),(0,255,0),2)
-        # cv2.imshow('',img)
-        # cv2.waitKey(0)
+        result = detecter.run(test_img_path, draw_result=True)
+        print('detect a image cost: ', time.time() - start)
+
+        # draw ground truth
         file_name = test_img_path.split('/')[-1]
-        cv2.imwrite('output/dog_test/'+file_name, img)
+        img = cv2.imread('output/image test/' + file_name)
+        cv2.rectangle(img, (test_bbox[0], test_bbox[1]), (test_bbox[2], test_bbox[3]), (0, 255, 0), 2)
+        cv2.imwrite('output/image test/' + file_name, img)
+
 

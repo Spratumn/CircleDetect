@@ -7,7 +7,6 @@ from torch.utils.data import Dataset
 
 from utils.image_process import get_affine_transform, affine_transform, color_aug
 from utils.label_process import get_bbox_from_json, get_gaussian_radius, gaussian2D ,draw_dense_wh, draw_gaussian
-from utils.plot import plot_hm
 
 
 class CircleDataset(Dataset):
@@ -31,12 +30,13 @@ class CircleDataset(Dataset):
         # for dog detection
         self.data_paths = pd.read_csv(os.path.join(self.cfg.DATA_DIR, '{}.csv'.format(phase)),
                                       header=None,
-                                      names=["image", "bbox"])
+                                      names=["image", "bbox", "class_id"])
         self.image_paths = self.data_paths["image"].values[1:]
         self.bbox = self.data_paths["bbox"].values[1:]
+        self.class_id = self.data_paths["class_id"].values[1:]
 
         self.max_objs = 128
-        self.class_name = ['__background__', 'circle']
+        self.class_name = ['__background__', 'cat', 'dog']
 
         # TODO
         # self._valid_ids = [
@@ -133,9 +133,10 @@ class CircleDataset(Dataset):
         hm = np.zeros((num_classes, output_h, output_w), dtype=np.float32)
         wh = np.zeros((self.max_objs, 2), dtype=np.float32)
         dense_wh = np.zeros((2, output_h, output_w), dtype=np.float32)
-        reg = np.zeros((self.max_objs, 2), dtype=np.float32)
         ind = np.zeros((self.max_objs,), dtype=np.int64)
-        reg_mask = np.zeros((self.max_objs,), dtype=np.uint8)
+
+        offset = np.zeros((self.max_objs, 2), dtype=np.float32)
+        offset_mask = np.zeros((self.max_objs,), dtype=np.uint8)
 
         # 3.gt label process
         gt_det = []
@@ -144,7 +145,7 @@ class CircleDataset(Dataset):
 
         # for dog detection
         boxes = [self.bbox[index]]  # x1xy1xx2xy2
-        class_id = 1  # set class_id with bboxs
+        class_id = int(self.class_id[index])  # set class_id with bboxs
         # for every bbox
         for k in range(len(boxes)):
             # 3.1 get bbox:[x1,y1,x2,y2] and classes
@@ -173,14 +174,15 @@ class CircleDataset(Dataset):
                 ct = np.array(
                     [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
                 ct_int = ct.astype(np.int32)
-                # 3.3 process hm,wh,reg
+                # 3.3 process hm,wh,offset
                 # 3.3.1 kth box w,h in 'wh'
                 wh[k] = 1. * w, 1. * h
                 ind[k] = ct_int[1] * output_w + ct_int[0]  # 2D->1D index value of center
-                # 3.3.2 kth box regression
-                reg[k] = ct - ct_int
-                # 3.3.3 kth box regression mark
-                reg_mask[k] = 1
+                if self.cfg.USE_OFFSET:
+                    # 3.3.2 kth box offset
+                    offset[k] = ct - ct_int
+                    # 3.3.3 kth box offset mark
+                    offset_mask[k] = 1
                 # 3.3.4 draw dense_wh first
                 draw_dense_wh(dense_wh, hm.max(axis=0), ct_int, wh[k], gaussian, radius)
                 # 3.3.5 draw gaussian on hm[class_id] with center and radius
@@ -188,11 +190,11 @@ class CircleDataset(Dataset):
                 gt_det.append([ct[0] - w / 2, ct[1] - h / 2,
                                ct[0] + w / 2, ct[1] + h / 2, 1, 0])
 
-        label = {'hm': hm, 'reg_mask': reg_mask, 'ind': ind, 'wh': wh}
         hm_a = hm.max(axis=0, keepdims=True)
         dense_wh_mask = np.concatenate([hm_a, hm_a], axis=0)
-        label.update({'dense_wh': dense_wh, 'dense_wh_mask': dense_wh_mask})
-        label.update({'reg': reg})
+        label = {'hm': hm, 'ind': ind, 'wh': wh, 'dense_wh': dense_wh, 'dense_wh_mask': dense_wh_mask}
+        if self.cfg.USE_OFFSET:
+            label.update({'offset': offset, 'offset_mask': offset_mask})
         return inp, label
 
 

@@ -28,16 +28,15 @@ def nms(dets, thresh):
 
         inds = np.where(ovr <= thresh)[0]
         order = order[inds + 1]
-
     return keep
 
 
 if __name__ == '__main__':
-    lists = [[1, 6, 1, 3, 0.98],
-             [3, 8, 2, 5, 0.75],
-             [4, 9, 2, 5, 0.85],
-             [2, 5, 4, 7, 0.80],
-             [1, 4, 6, 8, 0.91]]
+    lists = [[1, 1, 6, 3, 0.98],
+             [3, 2, 8, 5, 0.75],
+             [4, 2, 9, 5, 0.85],
+             [2, 4, 5, 7, 0.80],
+             [1, 6, 4, 8, 0.91]]
 
     lists = np.array(lists)
     res_indexs = nms(lists, 0.6)

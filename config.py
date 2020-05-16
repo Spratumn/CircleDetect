@@ -22,8 +22,8 @@ class Config(object):
     DEBUGGER_THEME = 'white'  # choices=['white', 'black']
 
     # model
-    NUM_CLASS = 2
-    ARCH = 'res_18'  # 'res_18 | res_101 |' hourglass'
+    NUM_CLASS = 3
+    ARCH = 'res_50'  # 'res_18 | res_34 | res_50| hourglass'
     HEAD = {'hm': NUM_CLASS,
             'wh': 2,
             'reg': 2}
@@ -39,9 +39,9 @@ class Config(object):
     DATA_STD = np.array([0.28863828, 0.27408164, 0.27809835], dtype=np.float32).reshape(1, 1, 3)
 
     # train
-    LR = 1.25e-4  # learning rate for batch size 32.
+    LR = 1.25e-4  # learning rate.
     LR_STEP = [90, 120]  # drop learning rate by 10.'
-    NUM_EPOCHS = 40  # total training epochs.
+    NUM_EPOCHS = 10  # total training epochs.
     BATCH_SIZE = 6
     VAL_INTERVALS = 5  # number of epochs to run validation.
 
@@ -49,7 +49,7 @@ class Config(object):
     FLIP_TEST = True  # flip data augmentation
     TEST_SCALES = [1]  # multi scale test augmentation.
     NMS = True  # run nms in testing
-    K = 100  # max number of output objects
+    K = 20  # max number of output objects
     CENTER_THRESH = 0.1  # threshold for centermap.
 
     # data augment
@@ -61,14 +61,14 @@ class Config(object):
     COLOR_AUG = False  # not use the color augmentation
 
     # loss
-    REG_LOSS = 'l2'  # regression loss: sl1 | l1 | l2
+    USE_OFFSET = True
+    OFFSET_LOSS = 'l2'  # regression loss: sl1 | l1 | l2
     HM_WEIGHT = 1  # loss weight for key point heat maps
     OFF_WEIGHT = 1  # loss weight for key point local offsets
-    WH_WEIGHT = 0.1  # loss weight for bounding box size
+    WH_WEIGHT = 2  # loss weight for bounding box size
 
     NORM_WH = True  # 'L1(\hat(y) / y, 1) or L1(\hat(y), y)
     DENSE_WH = True  # apply weighted regression near center or just apply regression on center point
-    CAT_SPEC_WH = False  # category specific bounding box size
 
 
 

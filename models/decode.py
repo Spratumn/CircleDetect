@@ -4,16 +4,22 @@ from __future__ import print_function
 
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
 from .utils import _gather_feat, _transpose_and_gather_feat
 
 
-def _nms(heat, kernel=3):
-    pad = (kernel - 1) // 2
+def plot(array2d):
+    plt.imshow(array2d)
+    plt.show()
 
+
+def heatmap_nms(heatmap, kernel=3):
+    # do nms with heatmap
+    pad = (kernel - 1) // 2
     hmax = nn.functional.max_pool2d(
-        heat, (kernel, kernel), stride=1, padding=pad)
-    keep = (hmax == heat).float()
-    return heat * keep
+        heatmap, (kernel, kernel), stride=1, padding=pad)
+    keep = (hmax == heatmap).float()
+    return heatmap * keep
 
 
 def _left_aggregate(heat):
@@ -112,54 +118,60 @@ def _topk_channel(scores, K=40):
 
 
 def _topk(scores, K=40):
-    batch, cat, height, width = scores.size()
-
-    topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
-
-    topk_inds = topk_inds % (height * width)
-    topk_ys = (topk_inds / width).int().float()
-    topk_xs = (topk_inds % width).int().float()
-
-    topk_score, topk_ind = torch.topk(topk_scores.view(batch, -1), K)
-    topk_clses = (topk_ind / K).int()
-    topk_inds = _gather_feat(
-        topk_inds.view(batch, -1, 1), topk_ind).view(batch, K)
-    topk_ys = _gather_feat(topk_ys.view(batch, -1, 1), topk_ind).view(batch, K)
-    topk_xs = _gather_feat(topk_xs.view(batch, -1, 1), topk_ind).view(batch, K)
+    batch_size, cat, height, width = scores.size()
+    # get top K heatmap value and indx (in 1d array of w*h) of every class
+    topk_scores, topk_inds = torch.topk(scores.view(batch_size, cat, -1), K)
+    # topk_inds = topk_inds % (height * width)
+    # print(topk_inds)
+    topk_ys = (topk_inds // width).float()
+    topk_xs = (topk_inds % width).float()
+    # get top K heatmap value and indx (in 1d array of w*h) of all class same as argmax of c channel
+    topk_score, topk_ind = torch.topk(topk_scores.view(batch_size, -1), K)
+    # belong to which class
+    topk_clses = (topk_ind // K)
+    topk_inds = _gather_feat(topk_inds.view(batch_size, -1, 1), topk_ind).view(batch_size, K)
+    topk_ys = _gather_feat(topk_ys.view(batch_size, -1, 1), topk_ind).view(batch_size, K)
+    topk_xs = _gather_feat(topk_xs.view(batch_size, -1, 1), topk_ind).view(batch_size, K)
+    # print(topk_score)  # confidences
+    # print(topk_clses)  # class_index
+    # print(topk_ys, topk_xs)  # center
+    # print(topk_inds)  # topk_inds[class_index]
 
     return topk_score, topk_inds, topk_clses, topk_ys, topk_xs
 
 
-def decode(heat, wh, reg=None, cat_spec_wh=False, K=100):
-    batch, cat, height, width = heat.size()
+def decode(heatmap, wh, offset=None, K=100):
+    """
 
-    # heat = torch.sigmoid(heat)
-    # perform nms on heatmaps
-    heat = _nms(heat)
+    """
+    batch_size, C, H, W = heatmap.size()
+    # perform nms on heatmaps by maxpooling2d
+    heatmap = heatmap_nms(heatmap)
 
-    scores, inds, clses, ys, xs = _topk(heat, K=K)
-    if reg is not None:
-        reg = _transpose_and_gather_feat(reg, inds)
-        reg = reg.view(batch, K, 2)
-        xs = xs.view(batch, K, 1) + reg[:, :, 0:1]
-        ys = ys.view(batch, K, 1) + reg[:, :, 1:2]
-    else:
-        xs = xs.view(batch, K, 1) + 0.5
-        ys = ys.view(batch, K, 1) + 0.5
+    scores, inds, clses, ys, xs = _topk(heatmap, K=K)
+    # scores:(N,k)
+    # inds:(N,k)
+    # clses:(N,k)
+    # ys:(N,k)
+    # xs:(N,k)
+
+    # get predicted wh by inds
     wh = _transpose_and_gather_feat(wh, inds)
-    if cat_spec_wh:
-        wh = wh.view(batch, K, cat, 2)
-        clses_ind = clses.view(batch, K, 1, 1).expand(batch, K, 1, 2).long()
-        wh = wh.gather(2, clses_ind).view(batch, K, 2)
-    else:
-        wh = wh.view(batch, K, 2)
-    clses = clses.view(batch, K, 1).float()
-    scores = scores.view(batch, K, 1)
+
+    # correct center with offset
+    if offset is not None:
+        # (N, 2, h, w)-> (N, k, 2)
+        offset = _transpose_and_gather_feat(offset, inds)
+        xs = xs.view(batch_size, K, 1) + offset[:, :, 0:1]
+        ys = ys.view(batch_size, K, 1) + offset[:, :, 1:2]
+
+    clses = clses.view(batch_size, K, 1).float()
+    scores = scores.view(batch_size, K, 1)
+    # get [x1,y1,x2,y2] from center and wh
     bboxes = torch.cat([xs - wh[..., 0:1] / 2,
                         ys - wh[..., 1:2] / 2,
                         xs + wh[..., 0:1] / 2,
                         ys + wh[..., 1:2] / 2], dim=2)
     detections = torch.cat([bboxes, scores, clses], dim=2)
-
     return detections
 

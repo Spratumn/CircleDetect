@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torchsummary import summary
 
-from models.resnet import resnet18, resnet34, resnet50
+from models.resnet import res_18, res_34, res_50
 
 
 def make_head_layer(head_conv, out_planes):
@@ -23,15 +23,19 @@ def make_head_layer(head_conv, out_planes):
     return head_layer
 
 
-class CircleNet(nn.Module):
-    def __init__(self, backbone, num_class=2, head_conv=64):
-        super(CircleNet, self).__init__()
-        self.num_class = num_class
-        self.backbone = backbone
+class CenterNet(nn.Module):
+    def __init__(self, cfg):
+        super(CenterNet, self).__init__()
+        backbone_factory = {'res_18': res_18(),
+                            'res_34': res_34(),
+                            'res_50': res_50()}
+        self.backbone = backbone_factory[cfg.ARCH]
         self.deconv_layer = self._make_deconv_layer()
-        self.hm = make_head_layer(head_conv, self.num_class)
-        self.wh = make_head_layer(head_conv, 2)
-        self.reg = make_head_layer(head_conv, 2)
+        self.hm = make_head_layer(cfg.HEAD_CONV, cfg.NUM_CLASS)
+        self.wh = make_head_layer(cfg.HEAD_CONV, 2)
+        if cfg.USE_OFFSET:
+            self.offset = make_head_layer(cfg.HEAD_CONV, 2)
+        self.cfg = cfg
 
     def _make_deconv_layer(self):
         inplanes = self.backbone.inplanes
@@ -56,12 +60,11 @@ class CircleNet(nn.Module):
         x = self.deconv_layer(x)
         hm = self.hm(x)
         wh = self.wh(x)
-        reg = self.reg(x)
-        rst = {'hm': hm, 'wh': wh, 'reg': reg}
+        if self.cfg.USE_OFFSET:
+            offset = self.offset(x)
+            rst = {'hm': hm, 'wh': wh, 'offset': offset}
+            return rst
+        rst = {'hm': hm, 'wh': wh}
         return rst
 
 
-if __name__ == '__main__':
-    re18 = resnet18()
-    cn = CircleNet(re18)
-    summary(cn, (3, 224, 224), device='cpu')
