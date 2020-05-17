@@ -1,20 +1,20 @@
 import torch
+from tqdm import tqdm
 
-from models.losses import CircleLoss
+from models.losses import CenterLoss
 from models.data_parallel import DataParallel
-from utils.utils import AverageMeter
 
 
-class CircleTrainer:
+class Trainer:
     def __init__(self, cfg, model, optimizer):
         self.cfg = cfg
         self.optimizer = optimizer
         self.model = model
         if cfg.USE_OFFSET:
-            self.loss_stats = ['total_loss', 'hm_loss', 'wh_loss', 'offset_loss']
+            self.loss_stats = {'total_loss': [], 'hm_loss': [], 'wh_loss': [], 'offset_loss': []}
         else:
-            self.loss_stats = ['total_loss', 'hm_loss', 'wh_loss']
-        self.loss = CircleLoss(cfg)
+            self.loss_stats = {'total_loss': [], 'hm_loss': [], 'wh_loss': []}
+        self.loss = CenterLoss(cfg)
 
     def set_device(self, gpus, device):
         if len(gpus) > 1:
@@ -28,7 +28,12 @@ class CircleTrainer:
                 if isinstance(v, torch.Tensor):
                     state[k] = v.to(device=device, non_blocking=True)
 
-    def run_epoch(self, phase, data_loader):
+    def run_epoch(self, epoch, phase, data_loader, log_file):
+        epoch_total_loss = 0.0
+        epoch_hm_loss = 0.0
+        epoch_wh_loss = 0.0
+        epoch_offset_loss = 0.0
+
         if phase == 'train':
             self.model.train()
             self.loss.train()
@@ -41,9 +46,9 @@ class CircleTrainer:
             # release cuda cache
             torch.cuda.empty_cache()
 
-        avg_loss_stats = {l: AverageMeter() for l in self.loss_stats}
-        for iter_id, batch in enumerate(data_loader):
-            batch_img, batch_label = batch
+        data_process = tqdm(data_loader)
+        for batch_item in data_process:
+            batch_img, batch_label = batch_item
             batch_img = batch_img.to(device=self.cfg.DEVICE)
             for k in batch_label:
                 batch_label[k] = batch_label[k].to(device=self.cfg.DEVICE)
@@ -54,14 +59,37 @@ class CircleTrainer:
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-            for l in avg_loss_stats:
-                avg_loss_stats[l].update(
-                    loss_stats[l].mean().item(), batch_img.size(0))
-        ret = {k: v.avg for k, v in avg_loss_stats.items()}
-        return ret
+            batch_loss = [loss_stats['total_loss'], loss_stats['hm_loss'], loss_stats['wh_loss']]
 
-    def val(self, data_loader):
-        return self.run_epoch('eval', data_loader)
+            epoch_total_loss += batch_loss[0]
+            epoch_hm_loss += batch_loss[1]
+            epoch_wh_loss += batch_loss[2]
 
-    def train(self, data_loader):
-        return self.run_epoch('train', data_loader)
+            loss_str = "total_loss: {},hm_loss: {:.4f},wh_loss: {:.4f}".format(batch_loss[0],
+                                                                               batch_loss[1],
+                                                                               batch_loss[2])
+            if 'offset_loss' in loss_stats:
+                batch_loss.append(loss_stats['offset_loss'])
+                epoch_offset_loss += batch_loss[3]
+                loss_str += ",offset_loss: {:.4f}".format(batch_loss[3])
+
+            data_process.set_description_str("epoch:{}".format(epoch))
+            data_process.set_postfix_str(loss_str)
+
+        log_str = "{},{:.4f},{:.4f},{:.4f}".format(epoch,
+                                                   epoch_total_loss / len(data_loader),
+                                                   epoch_hm_loss / len(data_loader),
+                                                   epoch_wh_loss / len(data_loader)
+                                                   )
+        if self.cfg.USE_OFFSET:
+            log_str += ",{:.4f}\n".format(epoch_offset_loss / len(data_loader))
+        else:
+            log_str += "\n"
+        log_file.write(log_str)
+        log_file.flush()
+
+    def val(self, epoch, data_loader, eval_log):
+        return self.run_epoch(epoch, 'eval', data_loader, eval_log)
+
+    def train(self, epoch, data_loader, train_log):
+        return self.run_epoch(epoch, 'train', data_loader, train_log)

@@ -81,8 +81,13 @@ class Detector:
         dets = dets.detach().cpu().numpy()
         # [N,K,6] -> [1, N*K, 6]
         dets = dets.reshape(-1, dets.shape[2])
-        dets = post_process(dets.copy(), [meta['c']], [meta['s']],
-                            meta['out_height'], meta['out_width'], self.cfg.NUM_CLASS, score_thresh=0.1)
+        dets = post_process(dets.copy(),
+                            [meta['c']],
+                            [meta['s']],
+                            meta['out_height'],
+                            meta['out_width'],
+                            self.cfg.NUM_CLASS,
+                            score_thresh=self.cfg.CENTER_THRESH)
 
         for j in range(1, self.cfg.NUM_CLASS):
             dets[j] = np.array(dets[j], dtype=np.float32).reshape(-1, 5)
@@ -109,11 +114,10 @@ class Detector:
                 res_dets[j] = res_dets[j][keep_inds]
         return res_dets
 
-    def draw_results(self, image, result, max_per_class=1):
+    def draw_results(self, image, result, max_per_class=20):
         # result: {1:det_array,2:det_array...}. det_array: shape of [k,5]
 
-        class_id_name = {1: 'cat: ',
-                         2: 'dog: '}
+        class_id_name = self.cfg.CLASS_NAME
         img = image
         for i in range(1, self.cfg.NUM_CLASS):
             rets = result[i]
@@ -155,28 +159,25 @@ if __name__ == '__main__':
 
     start = time.time()
     detecter = Detector('log/weights/model_last.pth', cfg)
-    # detecter.run('data/eee.jpg', draw_result=True)
-    test_data_path = pd.read_csv('data/test.csv',
-                                 header=None,
-                                 names=["image", "bbox", "class_id"])
-    image_paths = test_data_path["image"].values[1:]
-    bbox = test_data_path["bbox"].values[1:]
     print('load model cost: ', time.time()-start)
 
-    for test_indx in range(1, 180):
-        start = time.time()
-        test_img_path = image_paths[test_indx]
-        print(test_img_path)
-        test_bbox = bbox[test_indx]
-        test_bbox = test_bbox.split('x')
-        test_bbox = np.array([int(val) for val in test_bbox])
-        result = detecter.run(test_img_path, draw_result=True)
-        print('detect a image cost: ', time.time() - start)
+    # for test_indx in range(1, 10):
+    #     start = time.time()
+    #     test_img_path = image_paths[test_indx]
+    #     print(test_img_path)
+    #     test_bbox = bbox[test_indx]
+    #     test_bbox = test_bbox.split('x')
+    #     test_bbox = np.array([int(val) for val in test_bbox])
+    #     result = detecter.run(test_img_path, draw_result=True)
+    #     print('detect a image cost: ', time.time() - start)
+    #
+    #     # draw ground truth
+    #     file_name = test_img_path.split('/')[-1]
+    #     img = cv2.imread('output/image test/' + file_name)
+    #     cv2.rectangle(img, (test_bbox[0], test_bbox[1]), (test_bbox[2], test_bbox[3]), (0, 255, 0), 2)
+    #     cv2.imwrite('output/image test/' + file_name, img)
 
-        # draw ground truth
-        file_name = test_img_path.split('/')[-1]
-        img = cv2.imread('output/image test/' + file_name)
-        cv2.rectangle(img, (test_bbox[0], test_bbox[1]), (test_bbox[2], test_bbox[3]), (0, 255, 0), 2)
-        cv2.imwrite('output/image test/' + file_name, img)
+    result1 = detecter.run('data/213.jpg', draw_result=True)
+    result2 = detecter.run('data/329.jpg', draw_result=True)
 
 

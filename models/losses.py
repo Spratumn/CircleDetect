@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class CircleLoss(nn.Module):
+class CenterLoss(nn.Module):
     def __init__(self, cfg):
-        super(CircleLoss, self).__init__()
+        super(CenterLoss, self).__init__()
         self.hm_loss = FocalLoss()
         self.wh_loss = nn.L1Loss()
         if cfg.USE_OFFSET:
@@ -28,7 +28,7 @@ class CircleLoss(nn.Module):
             loss_stats = {'total_loss': total_loss, 'hm_loss': total_hm_loss,
                           'wh_loss': total_wh_loss}
 
-        print(loss_stats)
+        # print(loss_stats)
         return total_loss, loss_stats
 
 

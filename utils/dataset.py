@@ -3,13 +3,14 @@ import numpy as np
 import cv2
 import os
 import math
+import random
 from torch.utils.data import Dataset
 
 from utils.image_process import get_affine_transform, affine_transform, color_aug
-from utils.label_process import get_bbox_from_json, get_gaussian_radius, gaussian2D ,draw_dense_wh, draw_gaussian
+from utils.label_process import get_gaussian_radius, gaussian2D, draw_dense_wh, draw_gaussian
 
 
-class CircleDataset(Dataset):
+class MyDataset(Dataset):
     """
     load images and labels
     images: add augment
@@ -17,40 +18,21 @@ class CircleDataset(Dataset):
     x->w;y->h
     """
     def __init__(self, cfg, phase):
-        super(CircleDataset, self).__init__()
+        super(MyDataset, self).__init__()
         # read csv as data index
         self.cfg = cfg
         # for circle detection
-        # self.data_paths = pd.read_csv(os.path.join(self.cfg.DATA_DIR, '{}.csv'.format(phase)),
-        #                               header=None,
-        #                               names=["image", "json"])
-        # self.image_paths = self.data_paths["image"].values[1:]
-        # self.json_paths = self.data_paths["json"].values[1:]
-
-        # for dog detection
-        self.data_paths = pd.read_csv(os.path.join(self.cfg.DATA_DIR, '{}.csv'.format(phase)),
-                                      header=None,
-                                      names=["image", "bbox", "class_id"])
-        self.image_paths = self.data_paths["image"].values[1:]
-        self.bbox = self.data_paths["bbox"].values[1:]
-        self.class_id = self.data_paths["class_id"].values[1:]
-
-        self.max_objs = 128
-        self.class_name = ['__background__', 'cat', 'dog']
-
-        # TODO
-        # self._valid_ids = [
-        #     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13,
-        #     14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-        #     24, 25, 27, 28, 31, 32, 33, 34, 35, 36,
-        #     37, 38, 39, 40, 41, 42, 43, 44, 46, 47,
-        #     48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
-        #     58, 59, 60, 61, 62, 63, 64, 65, 67, 70,
-        #     72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
-        #     82, 84, 85, 86, 87, 88, 89, 90]
-        # self.cat_ids = {v: i for i, v in enumerate(self._valid_ids)}
-        # self.voc_color = [(v // 32 * 64 + 64, (v // 8) % 4 * 64, v % 8 * 32) \
-        #                   for v in range(1, self.cfg.NUM_CLASSES + 1)]
+        anns = np.load('data/dataset/augment data/anns.npy',allow_pickle=True).item()
+        self.image_paths = anns['image_paths']
+        self.bboxs = anns['bboxs']  # [x1,y1,x2,y2]
+        self.num_samples = len(self.image_paths)
+        # random samples
+        index = [i for i in range(self.num_samples)]
+        random.shuffle(index)
+        self.image_paths = [self.image_paths[i] for i in index]
+        self.bboxs = [self.bboxs[i] for i in index]
+        self.class_id = 1
+        self.max_objs = 20
 
         self._data_rng = np.random.RandomState(123)
         self._eig_val = np.array([0.2141788, 0.01817699, 0.00341571],
@@ -62,7 +44,7 @@ class CircleDataset(Dataset):
         ], dtype=np.float32)
 
         self.phase = phase
-        self.num_samples = len(self.image_paths)
+
         print('Loaded {} samples'.format(self.num_samples))
 
     def __len__(self):
@@ -141,21 +123,12 @@ class CircleDataset(Dataset):
         # 3.gt label process
         gt_det = []
         # for circle detection
-        # boxes = get_bbox_from_json(self.bbox[index])
-
-        # for dog detection
-        boxes = [self.bbox[index]]  # x1xy1xx2xy2
-        class_id = int(self.class_id[index])  # set class_id with bboxs
-        # for every bbox
-        for k in range(len(boxes)):
+        bboxes = self.bboxs[index]
+        class_id = self.class_id
+        for k in range(len(bboxes)):
             # 3.1 get bbox:[x1,y1,x2,y2] and classes
             # for circle detection
-            # bbox = bboxs[k]
-
-            # for dog detection
-            bbox = boxes[k]
-            bbox = bbox.split('x')
-            bbox = np.array([int(val) for val in bbox])
+            bbox = np.array(bboxes[k])
 
             if flipped:
                 bbox[[0, 2]] = width - bbox[[2, 0]] - 1

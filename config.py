@@ -22,7 +22,7 @@ class Config(object):
     DEBUGGER_THEME = 'white'  # choices=['white', 'black']
 
     # model
-    NUM_CLASS = 3
+    NUM_CLASS = 2
     ARCH = 'res_50'  # 'res_18 | res_34 | res_50| hourglass'
     HEAD = {'hm': NUM_CLASS,
             'wh': 2,
@@ -35,13 +35,15 @@ class Config(object):
     # dataset
     # input
     INPUT_SIZE = [512, 512]
+    CLASS_NAME = {0: '__background__',
+                  1: 'circle'}
     DATA_MEAN = np.array([0.40789654, 0.44719302, 0.47026115], dtype=np.float32).reshape(1, 1, 3)
     DATA_STD = np.array([0.28863828, 0.27408164, 0.27809835], dtype=np.float32).reshape(1, 1, 3)
 
     # train
-    LR = 1.25e-4  # learning rate.
+    LR = 1.0e-4  # learning rate.
     LR_STEP = [90, 120]  # drop learning rate by 10.'
-    NUM_EPOCHS = 10  # total training epochs.
+    NUM_EPOCHS = 5  # total training epochs.
     BATCH_SIZE = 6
     VAL_INTERVALS = 5  # number of epochs to run validation.
 
@@ -50,7 +52,7 @@ class Config(object):
     TEST_SCALES = [1]  # multi scale test augmentation.
     NMS = True  # run nms in testing
     K = 20  # max number of output objects
-    CENTER_THRESH = 0.1  # threshold for centermap.
+    CENTER_THRESH = 0.1  # threshold for detection score.
 
     # data augment
     RAND_CROP = True  # not use the random crop data augmentation

@@ -243,7 +243,7 @@ class exkp(nn.Module):
             ) for _ in range(nstack - 1)
         ])
 
-        ## keypoint heatmaps
+        # keypoint heatmaps
         for head in heads.keys():
             if 'hm' in head:
                 module = nn.ModuleList([
@@ -308,6 +308,15 @@ class HourglassNet(exkp):
         )
 
 
-def get_large_hourglass_net(num_layers, heads, head_conv):
+def get_large_hourglass_net(heads, head_conv):
     model = HourglassNet(heads, 2)
     return model
+
+
+if __name__ == '__main__':
+    from torchsummary import summary
+    heads = {
+        'hm':2, 'wh':2, 'offset':2
+    }
+    nt = get_large_hourglass_net(heads, 64)
+    summary(nt,(3,512,512),device='cpu')
