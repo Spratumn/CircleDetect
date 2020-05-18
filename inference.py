@@ -23,7 +23,7 @@ class Detector:
 
         self.mean = np.array(self.cfg.DATA_MEAN, dtype=np.float32).reshape(1, 1, 3)
         self.std = np.array(self.cfg.DATA_STD, dtype=np.float32).reshape(1, 1, 3)
-        self.max_per_image = 10
+        self.max_per_image = cfg.K
         self.scales = self.cfg.TEST_SCALES
         self.pause = True
 
@@ -144,7 +144,7 @@ class Detector:
             detections.append(dets)
         result = self.merge_outputs(detections)
         if draw_result:
-            image = self.draw_results(image, result)
+            image = self.draw_results(image, result, max_per_class=self.max_per_image)
             image_name = image_path.split('/')[-1]
             output_path = 'output/image test/' + image_name
             cv2.imwrite(output_path, image)
@@ -160,24 +160,11 @@ if __name__ == '__main__':
     start = time.time()
     detecter = Detector('log/weights/model_last.pth', cfg)
     print('load model cost: ', time.time()-start)
+    start = time.time()
+    for i in range(5):
+        image_path = 'data/test_images/00{}.jpg'.format(i)
+        detecter.run(image_path, draw_result=True)
+    print((time.time()-start)/7)
 
-    # for test_indx in range(1, 10):
-    #     start = time.time()
-    #     test_img_path = image_paths[test_indx]
-    #     print(test_img_path)
-    #     test_bbox = bbox[test_indx]
-    #     test_bbox = test_bbox.split('x')
-    #     test_bbox = np.array([int(val) for val in test_bbox])
-    #     result = detecter.run(test_img_path, draw_result=True)
-    #     print('detect a image cost: ', time.time() - start)
-    #
-    #     # draw ground truth
-    #     file_name = test_img_path.split('/')[-1]
-    #     img = cv2.imread('output/image test/' + file_name)
-    #     cv2.rectangle(img, (test_bbox[0], test_bbox[1]), (test_bbox[2], test_bbox[3]), (0, 255, 0), 2)
-    #     cv2.imwrite('output/image test/' + file_name, img)
-
-    result1 = detecter.run('data/213.jpg', draw_result=True)
-    result2 = detecter.run('data/329.jpg', draw_result=True)
 
 

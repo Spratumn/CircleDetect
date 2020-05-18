@@ -5,6 +5,8 @@ import os
 import math
 import random
 from torch.utils.data import Dataset
+from torchvision import transforms
+from imgaug import augmenters as iaa
 
 from utils.image_process import get_affine_transform, affine_transform, color_aug
 from utils.label_process import get_gaussian_radius, gaussian2D, draw_dense_wh, draw_gaussian
@@ -22,7 +24,7 @@ class MyDataset(Dataset):
         # read csv as data index
         self.cfg = cfg
         # for circle detection
-        anns = np.load('data/dataset/augment data/anns.npy',allow_pickle=True).item()
+        anns = np.load('data/dataset/augment data/anns.npy', allow_pickle=True).item()
         self.image_paths = anns['image_paths']
         self.bboxs = anns['bboxs']  # [x1,y1,x2,y2]
         self.num_samples = len(self.image_paths)
@@ -44,6 +46,7 @@ class MyDataset(Dataset):
         ], dtype=np.float32)
 
         self.phase = phase
+        self.transformer = transforms.Compose([ImageAug()])
 
         print('Loaded {} samples'.format(self.num_samples))
 
@@ -55,6 +58,11 @@ class MyDataset(Dataset):
         # 1.source image process
         # 1.1 load image by index
         img = cv2.imread(img_path)
+        bboxes = self.bboxs[index]
+        sample = {'image': img,
+                  'bboxs': bboxes}
+        img, bboxes = self.transformer(sample)['image'], self.transformer(sample)['bboxs']
+
         height, width = img.shape[0], img.shape[1]
         c = np.array([img.shape[1] / 2., img.shape[0] / 2.], dtype=np.float32)
         # keep the original resolution when test
@@ -123,7 +131,7 @@ class MyDataset(Dataset):
         # 3.gt label process
         gt_det = []
         # for circle detection
-        bboxes = self.bboxs[index]
+
         class_id = self.class_id
         for k in range(len(bboxes)):
             # 3.1 get bbox:[x1,y1,x2,y2] and classes
@@ -169,6 +177,20 @@ class MyDataset(Dataset):
         if self.cfg.USE_OFFSET:
             label.update({'offset': offset, 'offset_mask': offset_mask})
         return inp, label
+
+
+# imgaug Augmentation
+class ImageAug(object):
+    def __call__(self, sample):
+        image, bboxs = sample['image'], sample['bboxs']
+        if np.random.uniform(0, 1) > 0.5:
+            seq = iaa.Sequential([iaa.OneOf([
+                iaa.AdditiveGaussianNoise(scale=(0, 0.2 * 255)),
+                iaa.Sharpen(alpha=(0.1, 0.3), lightness=(0.7, 1.3)),
+                iaa.GaussianBlur(sigma=(0, 1.0))])])
+            image = seq.augment_image(image)
+        return {'image': image,
+                'bboxs': bboxs}
 
 
 def get_border(border, size):

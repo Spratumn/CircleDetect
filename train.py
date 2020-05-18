@@ -12,7 +12,7 @@ def main():
     torch.manual_seed(cfg.SEED)
     device = torch.device('cuda' if cfg.GPU[0] >= 0 else 'cpu')
 
-    start_epoch = 11
+    start_epoch = 21
     if start_epoch == 1:
         train_log = open(os.path.join(cfg.LOG_DIR, "train_log.csv"), 'w')
         train_log_title = "epoch,total_loss,hm_loss,wh_loss"

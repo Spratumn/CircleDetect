@@ -71,7 +71,7 @@ if __name__ == '__main__':
 
     aug = iaa.Sequential([crop_aug, resize_aug])
 
-    for i in range(250):
+    for i in range(346):
         src_img = cv2.imread(data_set_dir + '{}.jpg'.format(i))
         src_bboxs = get_bbox_from_json(data_set_dir + '{}.json'.format(i))
         for j in range(augment_rate):

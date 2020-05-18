@@ -23,7 +23,7 @@ class Config(object):
 
     # model
     NUM_CLASS = 2
-    ARCH = 'res_50'  # 'res_18 | res_34 | res_50| hourglass'
+    ARCH = 'res_18'  # 'res_18 | res_34 | res_50| hourglass'
     HEAD = {'hm': NUM_CLASS,
             'wh': 2,
             'reg': 2}
@@ -41,18 +41,18 @@ class Config(object):
     DATA_STD = np.array([0.28863828, 0.27408164, 0.27809835], dtype=np.float32).reshape(1, 1, 3)
 
     # train
-    LR = 1.0e-4  # learning rate.
+    LR = 2.0e-5  # learning rate.
     LR_STEP = [90, 120]  # drop learning rate by 10.'
-    NUM_EPOCHS = 5  # total training epochs.
-    BATCH_SIZE = 6
+    NUM_EPOCHS = 10  # total training epochs.
+    BATCH_SIZE = 8
     VAL_INTERVALS = 5  # number of epochs to run validation.
 
     # test
     FLIP_TEST = True  # flip data augmentation
     TEST_SCALES = [1]  # multi scale test augmentation.
     NMS = True  # run nms in testing
-    K = 20  # max number of output objects
-    CENTER_THRESH = 0.1  # threshold for detection score.
+    K = 100  # max number of output objects
+    CENTER_THRESH = 0.2  # threshold for detection score.
 
     # data augment
     RAND_CROP = True  # not use the random crop data augmentation
