@@ -8,6 +8,7 @@ from utils.image_process import get_affine_transform
 from utils.post_process import post_process
 from models.model import create_model, load_model
 from utils.nms import nms
+from utils.circle_detect import detect_circles
 from config import Config
 
 
@@ -160,11 +161,51 @@ if __name__ == '__main__':
     start = time.time()
     detecter = Detector('log/weights/model_last.pth', cfg)
     print('load model cost: ', time.time()-start)
-    start = time.time()
-    for i in range(5):
-        image_path = 'data/test_images/00{}.jpg'.format(i)
-        detecter.run(image_path, draw_result=True)
-    print((time.time()-start)/7)
+    image_path = 'data/test_images/002.jpg'
+    image = cv2.imread(image_path)
+    h, w, _ = image.shape
+    results = detecter.run(image_path)
+    bboxes = results[1]
+    bboxes[:, 0] = np.maximum(0, bboxes[:, 0] - 5)
+    bboxes[:, 1] = np.maximum(0, bboxes[:, 1] - 5)
+    bboxes[:, 2] = np.minimum(w, bboxes[:, 2] + 5)
+    bboxes[:, 3] = np.minimum(h, bboxes[:, 3] + 5)
+    for j in range(bboxes.shape[0]):
+
+        cv2.rectangle(image,
+                      (bboxes[j][0], bboxes[j][1]), (bboxes[j][2], bboxes[j][3]),
+                      (0, 0, 255), 2)
+    circles = []
+    for bbox in bboxes:
+        bbox = [int(val) for val in bbox[0:4]]
+        xc = (bbox[0] + bbox[2]) / 2
+        yc = (bbox[1] + bbox[3]) / 2
+        h = (bbox[3] - bbox[1])
+        w = (bbox[2] - bbox[0])
+        radius = min(h, w) // 5
+        roi_img = image[bbox[1]: bbox[3], bbox[0]: bbox[2], :]
+        try:
+            c = detect_circles(roi_img, gray_trans=True)[0][0]
+            circles.append([int((c[0] + bbox[0]) * 0.7 + xc * 0.3), int((c[1] + bbox[1]) * 0.7 + yc * 0.3), int(c[2])])
+        except TypeError:
+            circles.append([int(xc), int(yc), radius])
+
+    for c in circles:
+        cv2.circle(image, (c[0], c[1]), c[2], (0, 255, 0), 2)  # 画出外圆
+        cv2.circle(image, (c[0], c[1]), 2, (0, 0, 255), 2)  # 画出圆心
+    cv2.imshow(image_path, image)
+    cv2.waitKey(0)
+    image_name = image_path.split('/')[-1]
+    output_path = 'output/image test/' + image_name
+    cv2.imwrite(output_path, image)
+
+
+
+    # start = time.time()
+    # for i in range(5):
+    #     image_path = 'data/test_images/00{}.jpg'.format(i)
+    #     detecter.run(image_path, draw_result=True)
+    # print((time.time()-start)/7)
 
 
 
