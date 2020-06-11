@@ -1,6 +1,11 @@
 import torch.nn as nn
 
 
+def conv7x7(in_planes, out_planes, stride):
+    """7x7 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=7, stride=stride, padding=3, bias=False)
+
+
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
@@ -161,4 +166,5 @@ def res_152():
 if __name__ == '__main__':
     from torchsummary import summary
     rs = res_18()
+    print(rs.inplanes)
     summary(rs, (3, 224, 224), device='cpu')

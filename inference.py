@@ -10,6 +10,7 @@ from models.model import create_model, load_model
 from utils.nms import nms
 from utils.circle_detect import detect_circles
 from config import Config
+import matplotlib.pyplot as plt
 
 
 class Detector:
@@ -17,7 +18,7 @@ class Detector:
         super(Detector, self).__init__()
         self.cfg = cfg
         print('Creating model...')
-        self.model = create_model(self.cfg)
+        self.model = create_model(self.cfg, 'litnet')
         self.model = load_model(self.model, model_path)
         self.model = self.model.to(self.cfg.DEVICE)
         self.model.eval()
@@ -60,7 +61,7 @@ class Detector:
     def process(self, images):
         with torch.no_grad():
             output = self.model(images)
-            hm = output['hm'].sigmoid_()
+            hm = output['hm'].softmax(dim=1)
             wh = output['wh']
             if self.cfg.USE_OFFSET:
                 offset = output['offset']
@@ -74,6 +75,7 @@ class Detector:
                 wh = (wh[0:1] + flip_tensor(wh[1:2])) / 2
                 if self.cfg.USE_OFFSET:
                     offset = (offset[0:1] + flip_tensor(offset[1:2])) / 2
+            hm = hm[:, 1:, :]
             dets = decode(hm, wh, offset, K=self.cfg.K)
             # dets: shape of [N,K,6]. det:[x1,y1,x2,y2,score,class_id] in down_sample size
         return dets
@@ -152,6 +154,22 @@ class Detector:
 
         return result
 
+    def show_hm(self, image_path):
+        image = cv2.imread(image_path)
+        images, meta = self.pre_process(image, 1)
+        images = images.to(self.cfg.DEVICE)
+        output = self.model(images)
+        hm = output['hm'][0]
+        hm = hm.softmax(dim=0)
+        hm = hm.cpu().detach().numpy()
+        print(hm.shape)
+
+        plt.subplot(1, 2, 1)
+        plt.imshow(hm[0])
+        plt.subplot(1, 2, 2)
+        plt.imshow(hm[1])
+        plt.show()
+
 
 if __name__ == '__main__':
     import pandas as pd
@@ -159,9 +177,9 @@ if __name__ == '__main__':
     cfg = Config()
 
     start = time.time()
-    detecter = Detector('log/weights/model_last.pth', cfg)
+    detecter = Detector('log/weights/model_epoch_10.pth', cfg)
     print('load model cost: ', time.time()-start)
-    image_path = 'data/test_images/002.jpg'
+    image_path = 'data/test_images/004.jpg'
     image = cv2.imread(image_path)
     h, w, _ = image.shape
     results = detecter.run(image_path)

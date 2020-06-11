@@ -129,7 +129,7 @@ def _topk(scores, K=40):
     # get top K heatmap value and indx (in 1d array of w*h) of all class same as argmax of c channel
     topk_score, topk_ind = torch.topk(topk_scores.view(batch_size, -1), K)
     # belong to which class
-    topk_clses = (topk_ind // K)
+    topk_clses = (topk_ind // K) + 1
     topk_inds = _gather_feat(topk_inds.view(batch_size, -1, 1), topk_ind).view(batch_size, K)
     topk_ys = _gather_feat(topk_ys.view(batch_size, -1, 1), topk_ind).view(batch_size, K)
     topk_xs = _gather_feat(topk_xs.view(batch_size, -1, 1), topk_ind).view(batch_size, K)

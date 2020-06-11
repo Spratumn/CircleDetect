@@ -42,6 +42,19 @@ def draw_gaussian(heatmap, center, gaussian, radius):
     return heatmap
 
 
+def draw_background_gaussian(heatmap, center, gaussian, radius):
+    gaussian = 1 - gaussian
+    x, y = int(center[0]), int(center[1])
+    height, width = heatmap.shape[0:2]
+    left, right = min(x, radius), min(width - x, radius + 1)
+    top, bottom = min(y, radius), min(height - y, radius + 1)
+    masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
+    masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
+    if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0:
+        np.minimum(masked_heatmap, masked_gaussian, out=masked_heatmap)
+    return heatmap
+
+
 def draw_dense_wh(dense_wh, heatmap_max, center, wh_value, gaussian, radius, is_offset=False):
     diameter = 2 * radius + 1
     wh_value = np.array(wh_value, dtype=np.float32).reshape(-1, 1, 1)

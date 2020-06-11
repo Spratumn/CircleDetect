@@ -9,7 +9,7 @@ class Config(object):
     OUTPUT_DIR = 'output'
     GPU = [0]
     DEVICE = 'cuda'
-    NUM_WORKERS = 4  # 'dataloader threads. 0 for single-thread.'
+    NUM_WORKERS = 0  # 'dataloader threads. 0 for single-thread.'
     NOT_CUDA_BENCHMARK = False  # disable when the input size is not fixed.
     SEED = 317  # random seed from CornerNet
 
@@ -23,7 +23,8 @@ class Config(object):
 
     # model
     NUM_CLASS = 2
-    ARCH = 'res_18'  # 'res_18 | res_34 | res_50| hourglass'
+
+    ARCH = 'litnet'  # 'res_18 | res_34 | litnet'
     HEAD = {'hm': NUM_CLASS,
             'wh': 2,
             'reg': 2}
@@ -44,18 +45,18 @@ class Config(object):
     LR = 2.0e-5  # learning rate.
     LR_STEP = [90, 120]  # drop learning rate by 10.'
     NUM_EPOCHS = 10  # total training epochs.
-    BATCH_SIZE = 8
+    BATCH_SIZE = 16
     VAL_INTERVALS = 5  # number of epochs to run validation.
 
     # test
     FLIP_TEST = True  # flip data augmentation
     TEST_SCALES = [1]  # multi scale test augmentation.
     NMS = True  # run nms in testing
-    K = 100  # max number of output objects
+    K = 20  # max number of output objects
     CENTER_THRESH = 0.2  # threshold for detection score.
 
     # data augment
-    RAND_CROP = True  # not use the random crop data augmentation
+    RAND_CROP = True  # use the random crop data augmentation
     SHIFT = 0.1  # when not using random crop apply shift augmentation.
     SCALE = 0.4  # when not using random crop apply scale augmentation.
     ROTATE = 0  # when not using random crop apply rotation augmentation.

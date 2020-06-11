@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 
 
 class CenterLoss(nn.Module):
@@ -44,7 +45,16 @@ class FocalLoss(nn.Module):
         inputs: shape of (N,C,H,W)
         target: shape of (N,C,H,W)
         """
-        inputs = inputs.sigmoid_()
+        inputs = inputs.softmax(dim=1)
+        inputs = inputs[:, 1:, :]
+        target = target[:, 1:, :]
+
+        # plt.subplot(1, 2, 1)
+        # plt.imshow(inputs[0][0].cpu().detach().numpy())
+        # plt.subplot(1, 2, 2)
+        # plt.imshow(target[0][0].cpu().detach().numpy())
+        # plt.show()
+
         inputs = torch.clamp(inputs, min=1e-4, max=1 - 1e-4)
 
         pos_inds = target.eq(1)
@@ -71,13 +81,13 @@ class FocalLoss(nn.Module):
 
 
 class RegLoss(nn.Module):
-    '''Regression loss for an output tensor
+    """Regression loss for an output tensor
     Arguments:
       output (batch x dim x h x w)
       mask (batch x max_objects)
       ind (batch x max_objects)
       target (batch x max_objects x dim)
-  '''
+  """
 
     def __init__(self):
         super(RegLoss, self).__init__()
@@ -134,6 +144,36 @@ def _gather_feat(feat, ind, mask=None):
         feat = feat[mask]
         feat = feat.view(-1, dim)
     return feat
+
+
+class FeatureLoss(nn.Module):
+    def __init__(self):
+        super(FeatureLoss, self).__init__()
+
+    def forward(self, inputs, target):
+        """
+        inputs: shape of (N,C,H,W)
+        target: shape of (N,C,H,W)
+        """
+        mse = nn.MSELoss()
+
+        return mse(inputs, target)
+
+
+class TeacherLoss(nn.Module):
+    def __init__(self, cfg):
+        super(TeacherLoss, self).__init__()
+        self.center_loss = CenterLoss(cfg)
+        self.feature_loss = FeatureLoss()
+
+    def forward(self, input_feature, target_feature, input_result, target_result):
+        """
+        inputs: shape of (N,C,H,W)
+        target: shape of (N,C,H,W)
+        """
+        feature_l = self.feature_loss(input_feature, target_feature)
+        center_l, loss_stats = self.center_loss(input_result, target_result)
+        return feature_l + center_l, loss_stats
 
 
 if __name__ == '__main__':

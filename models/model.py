@@ -3,8 +3,8 @@ import torch
 from models.centernet import CenterNet
 
 
-def create_model(cfg):
-    model = CenterNet(cfg)
+def create_model(cfg, arch):
+    model = CenterNet(cfg, arch)
     return model
 
 
@@ -81,5 +81,5 @@ if __name__ == '__main__':
     from config import Config
     cfg = Config()
 
-    model = CenterNet(cfg)
+    model = CenterNet(cfg, 'res_18')
     summary(model, (3, 512, 512), device='cpu')
