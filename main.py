@@ -22,8 +22,8 @@ if __name__ == '__main__':
     #
     # print(compute_metrics(pre_bbox, gt_bbox))
     cfg = Config()
-    # det = Detector('log/weights/model_last.pth', cfg)
-    # det.show_hm('data/test_images/002.jpg')
+    det = Detector('log/weights/model_last_res.pth', cfg)
+    det.show_hm('data/test_images/moulde.jpg')
     # ct = CenterNet(cfg)
     # from torchsummary import summary
     # summary(ct,(3, 224,224),device='cpu')

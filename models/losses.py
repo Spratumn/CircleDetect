@@ -22,6 +22,13 @@ class CenterLoss(nn.Module):
             total_loss = cfg.HM_WEIGHT * total_hm_loss \
                          + cfg.WH_WEIGHT * total_wh_loss \
                          + cfg.OFF_WEIGHT * total_offset_loss
+            # wh_out = output['wh']
+            # wh_label = label['dense_wh']
+            # plt.subplot(1, 2, 1)
+            # plt.imshow(wh_out[0][0].cpu().detach().numpy())
+            # plt.subplot(1, 2, 2)
+            # plt.imshow(wh_label[0][0].cpu().detach().numpy())
+            # plt.show()
             loss_stats = {'total_loss': total_loss, 'hm_loss': total_hm_loss,
                           'wh_loss': total_wh_loss, 'offset_loss': total_offset_loss}
         else:

@@ -18,7 +18,7 @@ class Detector:
         super(Detector, self).__init__()
         self.cfg = cfg
         print('Creating model...')
-        self.model = create_model(self.cfg, 'litnet')
+        self.model = create_model(self.cfg, 'res_18')
         self.model = load_model(self.model, model_path)
         self.model = self.model.to(self.cfg.DEVICE)
         self.model.eval()
@@ -177,9 +177,9 @@ if __name__ == '__main__':
     cfg = Config()
 
     start = time.time()
-    detecter = Detector('log/weights/model_epoch_10.pth', cfg)
+    detecter = Detector('log/weights/model_last_res_34.pth', cfg)
     print('load model cost: ', time.time()-start)
-    image_path = 'data/test_images/004.jpg'
+    image_path = 'data/test_images/moulde.jpg'
     image = cv2.imread(image_path)
     h, w, _ = image.shape
     results = detecter.run(image_path)

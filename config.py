@@ -24,7 +24,7 @@ class Config(object):
     # model
     NUM_CLASS = 2
 
-    ARCH = 'litnet'  # 'res_18 | res_34 | litnet'
+    ARCH = 'res_18'  # 'res_18 | res_34 | litnet'
     HEAD = {'hm': NUM_CLASS,
             'wh': 2,
             'reg': 2}

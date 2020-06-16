@@ -81,5 +81,5 @@ if __name__ == '__main__':
     from config import Config
     cfg = Config()
 
-    model = CenterNet(cfg, 'res_18')
+    model = CenterNet(cfg, 'litnet')
     summary(model, (3, 512, 512), device='cpu')

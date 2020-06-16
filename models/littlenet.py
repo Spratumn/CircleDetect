@@ -82,4 +82,4 @@ class LitNet(nn.Module):
 if __name__ == '__main__':
     from torchsummary import summary
     rs = LitNet()
-    summary(rs, (3, 224, 224), device='cpu')
+    summary(rs, (3, 512, 512), device='cpu')
