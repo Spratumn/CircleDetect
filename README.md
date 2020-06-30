@@ -1,2 +1,2 @@
 # CircleDetect
-Based on CebnterNet https://github.com/xingyizhou/CenterNet
+Based on CenterNet https://github.com/xingyizhou/CenterNet
